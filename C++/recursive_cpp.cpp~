@@ -45,7 +45,6 @@ Node *learn_node(){
 	VectorXf w2(2);
 	w2(1)=1;w2(0)=2;
 	curnode->w=w2;
-	curnode->w(0)=1;
 	curnode->chosen_d=rand()%10;
 	curnode->entropy=(double)rand() / RAND_MAX;
 	return curnode;

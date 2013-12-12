@@ -7,15 +7,14 @@ using namespace Eigen;
 
 class Node {
   	public:
-		Node();
 		VectorXf w;
 		std::vector<int> label;
 		float entropy=0.0;
 		int chosen_d=0;
 		std::vector<int> leaf_weight;
-		std::vector<Node> pos;
-		std::vector<Node> neg;
-	// Insertion operator
+		Node* pos=NULL;
+		Node* neg=NULL;
+	/* Insertion operator
 	friend std::ostream& operator<<(std::ostream& os, const Node& n)
 	{
 		int t=3;
@@ -36,114 +35,129 @@ class Node {
 
 		os << n.w(0) << '\n';
 		os << n.w(1) << '\n';
-		if(!n.pos.empty()){
+		if(n.label.empty()){//not a leaf
 			os << "p" << '\n';
-			os << n.pos.front();
-		}
-		if(!n.neg.empty()){
+			os << n->pos;
+
 			os << "n" << '\n';
-			os << n.neg.front();
+			os << n->neg;
 		}
 		return os;
+	}*/
+	Node()
+	{
+		pos = neg = NULL;
 	}
+	~Node()
+	{
+		if(pos) delete pos;
+		if(neg) delete neg;
+	}
+
+	protected:
+		Node(const Node &n); // copying proibited
 };
 
-Node::Node(){
+/*Node::Node(){
+	pos = neg = NULL;
 	VectorXf w2(2);
 	w2(0)=0;
 	w2(1)=0;
 	w=w2;
-}
+}*/
 
-Node load_node(ifstream* ifs){
-	Node node;
+Node *load_node(ifstream* ifs){
+	Node *node = new Node();
+	VectorXf w2(2);
+	w2(0)=0;
+	w2(1)=0;
+	node->w=w2;
 	string line, token;
-	//cout << "reading node: ";
+	//cout << "reading node: " << endl;
 	getline (*ifs, line);
 	std::istringstream ss(line);
 	std::getline(ss, token, ',');
 	int m=atoi(token.c_str());
 	for(int i=0;i<m;i++){
 		std::getline(ss, token, ',');
-		node.label.push_back(atoi(token.c_str()));
+		node->label.push_back(atoi(token.c_str()));
 	}
 	getline (*ifs, line);
-	node.entropy = atof(line.c_str());
+	node->entropy = atof(line.c_str());
 	getline (*ifs, line);
-	node.chosen_d = atoi(line.c_str());
+	node->chosen_d = atoi(line.c_str());
 	getline (*ifs, line);
 	std::istringstream ss_weights(line);
 	std::getline(ss_weights, token, ',');
 	m=atoi(token.c_str());
 	for(int i=0;i<m;i++){
 		std::getline(ss_weights, token, ',');
-		node.leaf_weight.push_back(atoi(token.c_str()));
+		node->leaf_weight.push_back(atoi(token.c_str()));
 	}
 	getline (*ifs, line);
-	node.w(0) = atof(line.c_str());
+	node->w(0) = atof(line.c_str());
 	getline (*ifs, line);
-	node.w(1) = atof(line.c_str());
+	node->w(1) = atof(line.c_str());
 	//cout << endl;
 	getline (*ifs, line);
 	if(line == "p"){//careful, a node must have either 0 or two children!
 		//the order is always 1)positive, 2)negative.
-		node.pos.push_back(load_node(ifs));
-		node.neg.push_back(load_node(ifs));
+		node->pos = load_node(ifs);
+		node->neg = load_node(ifs);
 		//(Either can have an arbitrary substructure)
 	}
 	return node;
 }
 
-void traverse(Node node){
-	cout << "traversing - ";
-	//cout << "+" << n.pos << ", -" << n.neg << endl;//n.entropy << endl;
-	if(!node.pos.empty()){
-		cout << "pos:";
-		traverse(node.pos.front());
-	}
-	if(!node.neg.empty()){
-		cout << "neg:";
-		traverse(node.neg.front());
-	}
+void traverse(Node* n){
+	cout << "trying to get node at " << n << endl;
+	Node &node=*n;
+	//cout << "traversing - ";
+	cout << "ok. My offspring hang out at +" << (*n).pos << ", and -" << (*n).neg << endl;//n.entropy << endl;
+	if(node.pos!=NULL){
+		cout << "node.pos!=NULL" << endl;
+		traverse(node.pos);
+	}if(node.neg!=NULL)
+		traverse(node.neg);
 }
 
-MatrixXi eval_tree(Node curnode, VectorXf datapoint){
+MatrixXi eval_tree(Node *curnode, VectorXf datapoint){
 	//cout << "evaluating for datapoint: " << datapoint.transpose() << endl << "curnode: " << endl << curnode << endl;
-	if(curnode.leaf_weight.size()>0){//is a leaf?
-		MatrixXi label_and_weight(curnode.label.size(),2);
-		for(int i=0;i<curnode.label.size();i++){
-			label_and_weight(i,0)=curnode.label[i];
-			label_and_weight(i,1)=curnode.leaf_weight[i];
+	if(curnode->leaf_weight.size()>0){//is a leaf?
+		MatrixXi label_and_weight(curnode->label.size(),2);
+		for(int i=0;i<curnode->label.size();i++){
+			label_and_weight(i,0)=curnode->label[i];
+			label_and_weight(i,1)=curnode->leaf_weight[i];
 		}
 		return label_and_weight;
 	}else{//a decision node
 		//recreate relevant X
 		VectorXf X_dimension(2);
 		X_dimension(0)=1.0;
-		X_dimension(1)=datapoint(curnode.chosen_d);
+		X_dimension(1)=datapoint(curnode->chosen_d);
 
 		//cout << X_dimension.transpose() << " times " << curnode.w.transpose() << endl;
 		//cout << "that's easy, e is just " << X_dimension.dot(curnode.w) << endl;
 
 		//apply linear classifier
-		if(X_dimension.dot(curnode.w)>0.0)//pos
-			return eval_tree(curnode.pos.front(),datapoint);
+		if(X_dimension.dot(curnode->w)>0.0)//pos
+			return eval_tree(curnode->pos,datapoint);
 		else//neg
-			return eval_tree(curnode.neg.front(),datapoint);
+			return eval_tree(curnode->neg,datapoint);
 	}
 }
 
 //return a vector of unique labels in the leaves of a decision tree
-vector<int> get_unique_labels(Node curnode){
-	if(curnode.leaf_weight.size()>0){//leaf node
+vector<int> get_unique_labels(Node *curnode){
+	if(curnode->leaf_weight.size()>0){//leaf node
 		vector<int> leaf;
-		for(int i=0;i<curnode.label.size();i++)
-			leaf.push_back(curnode.label[i]);
+		for(int i=0;i<curnode->label.size();i++)
+			leaf.push_back(curnode->label[i]);
 		return leaf;
 	}else{//decision node
 		vector<int> pos, neg;
-		pos=get_unique_labels(curnode.pos.front());
-		neg=get_unique_labels(curnode.neg.front());
+		pos=get_unique_labels(curnode->pos);
+		neg=get_unique_labels(curnode->neg);
 		//combine the label vectors. We can assume that pos and neg don't contain duplicates
 		for (int i=0;i<pos.size();i++){
 			bool in_neg=false;
@@ -234,7 +248,8 @@ int main(int argc, char** argv)
 	
 	std::getline(ss, token, ' ');
 	num_trees = atoi(token.c_str());
-	std::vector<Node> forest;
+	std::vector<Node*> forest;
+	cout << "There are " << num_trees << " trees, reading..." << endl;
 	for (int i=0;i<num_trees;i++)
 		forest.push_back(load_node(&ifs));
 
@@ -257,11 +272,12 @@ int main(int argc, char** argv)
 		VectorXf datapoint(cols);
 		for (int j=0;j<cols;j++)
 			datapoint(j)=csv(i,j);
-		cout << "evaluating " << num_trees << " trees on point " << i << "/" << csv.rows();
+		//cout << "evaluating " << num_trees << " trees on point " << i << "/" << csv.rows();
 		for (int j=0;j<num_trees;j++){
 			MatrixXi tmp_res = eval_tree(forest[j],datapoint);
-			cout << ".";
-			cout.flush();
+			//cout << ".";
+			//cout.flush();
+
 			//if(tmp_res.rows()>1)
 			//	cout << "tree " << j << " and point " << i << ": " << endl << tmp_res << endl;//label: " << tmp_res(0) << ", weight: " << tmp_res(1) << endl;
 			for (int k=0;k<unique_labels.size();k++)

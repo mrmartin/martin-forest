@@ -7,8 +7,7 @@ using namespace Eigen;
 
 class Node {
   	public:
-		Node();
-		VectorXf w;
+		float w;
 		std::vector<int> label;
 		float entropy=0.0;
 		int chosen_d=0;
@@ -34,8 +33,7 @@ class Node {
 			os  << "," << n.leaf_weight[i];
 		os << '\n';		
 
-		os << n.w(0) << '\n';
-		os << n.w(1) << '\n';
+		os << n.w << '\n';
 		if(!n.pos.empty()){
 			os << "p" << '\n';
 			os << n.pos.front();
@@ -47,13 +45,6 @@ class Node {
 		return os;
 	}
 };
-
-Node::Node(){
-	VectorXf w2(2);
-	w2(0)=0;
-	w2(1)=0;
-	w=w2;
-}
 
 float entropy(VectorXi labels, VectorXi unique_labels){
 	//count how many there are of each class
@@ -103,18 +94,135 @@ std::vector<std::vector<int> > unconditioned_partition (int l){
 	return partitions;
 }
 
-Node learn_node(MatrixXf csv, VectorXi labels, VectorXi unique_labels){
+/*Node learn_node(MatrixXf X, VectorXi labels, VectorXi unique_labels){
 	int num_unique=unique_labels.size();
 	//First, select a random combination of label subsets to create a binary classification problem
 	std::vector<std::vector<int> > partitions = unconditioned_partition(num_unique);
-	/*cout << "division: ";
-	for(std::vector<int>::size_type i = 0; i != partitions[0].size(); i++) {
-		printf("%d ",unique_labels[partitions[0][i]]);
+	//using partitions, X, and labels, find the best dividing line for the first dimension
+	//count which apply
+	int relevant_rows=0;
+	for(int j=0;j<labels.size();j++){
+		for(int i=0;i<partitions[0].size();i++)
+			if(labels(j)==unique_labels[partitions[0][i]])
+				relevant_rows++;
+		for(int i=0;i<partitions[1].size();i++)
+			if(labels(j)==unique_labels[partitions[1][i]])
+				relevant_rows++;
 	}
-	printf(" - ");
-	for(std::vector<int>::size_type i = 0; i != partitions[1].size(); i++) {
-		printf("%d ",unique_labels[partitions[1][i]]);
-	}*/
+	//cout << relevant_rows << " rows are relevant to this." << endl;
+	float best_w=0;
+	int best_d;
+	int best_error=relevant_rows;
+	for(int d=0;d<X.cols();d++){//for each dimension of X
+		float values[relevant_rows];
+		bool binary_labels[relevant_rows];
+		int row_counter=0;
+		for(int i=0;i<labels.size();i++){
+			for(int j=0;j<partitions[0].size();j++)
+				if(labels(i)==unique_labels[partitions[0][j]])
+					binary_labels[row_counter++]=false;
+			for(int j=0;j<partitions[1].size();j++)
+				if(labels(i)==unique_labels[partitions[1][j]])
+					binary_labels[row_counter++]=true;
+		}
+		row_counter=0;
+		for(int i=0;i<labels.size();i++){
+			for(int j=0;j<partitions[0].size();j++)
+				if(labels(i)==unique_labels[partitions[0][j]])
+					values[row_counter++]=X(i,d);
+			for(int j=0;j<partitions[1].size();j++)
+				if(labels(i)==unique_labels[partitions[1][j]])
+					values[row_counter++]=X(i,d);
+		}
+
+		//print labels and values
+		//cout << endl << "dimension " << d << ":" << endl;
+		//for(int i=0;i<relevant_rows;i++)
+		//	cout << binary_labels[i] << ", ";
+		//cout << endl;
+		//for(int i=0;i<relevant_rows;i++)
+		//	cout << values[i] << ", ";
+		//cout << endl;
+
+		//now, bubble sort values, and move binary_labels accordingly
+		for(int i=1;i<relevant_rows;i++){
+			for(int j=0;j<relevant_rows-i;j++){
+				if(values[j]>values[j+1]){//swap
+					float tmp=values[j];
+					values[j]=values[j+1];
+					values[j+1]=tmp;
+
+					bool btmp=binary_labels[j];
+					binary_labels[j]=binary_labels[j+1];
+					binary_labels[j+1]=btmp;
+				}
+			}
+		}
+
+		//print labels and values
+		//cout << "sorted values :" << endl;
+		//for(int i=0;i<relevant_rows;i++)
+		//	cout << binary_labels[i] << ", ";
+		//cout << endl;
+		//for(int i=0;i<relevant_rows;i++)
+		//	cout << values[i] << ", ";
+		//cout << endl;
+
+		//place w between every pair, and calculate errors
+		for(int i=1;i<relevant_rows;i++){
+			int error=0;
+			for(int j=0;j<i;j++)
+				error+=binary_labels[j]?0:1;
+			for(int j=i;j<relevant_rows;j++)
+				error+=binary_labels[j]?1:0;
+			//cout << error << ",";
+			//an error of 0 and an error of relevant_rows are both perfect, but the second would require flipping left and right. Since that doesn't matter, we can compare error to relevant_rows-error
+			if(error<best_error || relevant_rows-error<best_error){//new best w
+				best_w=(values[i]+values[i-1])/2.0;
+				best_d=d;
+				best_error=min(error,relevant_rows-error);
+				//cout << "best error is now a measy " << best_error << endl;
+			}
+		}
+	}
+	cout << endl << "best divider is at " << best_w << " along dimension " << best_d << ", with an error of " << best_error << endl;
+
+	Node curnode;
+	curnode.w=best_w;
+	curnode.chosen_d=best_d;
+	//curnode.entropy=lowest_entropy;
+	return curnode;
+}*/
+
+Node learn_node(MatrixXf X, VectorXi labels, VectorXi unique_labels){
+	//cout << "things are cool" << endl;
+	Node curnode;
+	curnode.chosen_d=rand()%X.cols();
+	//find min and max here
+	float min=std::numeric_limits<float>::max();
+	float max=std::numeric_limits<float>::min();
+	for(int i=0;i<X.rows();i++){
+		if(min>X(i,curnode.chosen_d))
+			min=X(i,curnode.chosen_d);
+		if(max<X(i,curnode.chosen_d))
+			max=X(i,curnode.chosen_d);
+	}
+	curnode.w=(max-min)* ((double)rand() / RAND_MAX) +min;
+	return curnode;
+}
+
+/*Node learn_node(MatrixXf csv, VectorXi labels, VectorXi unique_labels){
+	int num_unique=unique_labels.size();
+	//First, select a random combination of label subsets to create a binary classification problem
+	std::vector<std::vector<int> > partitions = unconditioned_partition(num_unique);
+	//cout << "division: ";
+	//for(std::vector<int>::size_type i = 0; i != partitions[0].size(); i++) {
+	//	printf("%d ",unique_labels[partitions[0][i]]);
+	//}
+	//printf(" - ");
+	//for(std::vector<int>::size_type i = 0; i != partitions[1].size(); i++) {
+	//	printf("%d ",unique_labels[partitions[1][i]]);
+	//}
 	int posrows=0;
 	int negrows=0;
 	for (int j=0;j<csv.rows();j++){
@@ -194,14 +302,14 @@ Node learn_node(MatrixXf csv, VectorXi labels, VectorXi unique_labels){
 			else
 				labels_neg(negrows++)=labels(j);
 
-		/*cout << "positive labels:";
-		for(int j=0;j<labels_pos.size();j++)
-			cout << labels_pos(j) << ",";
-		cout << endl;
-		cout << "negative labels:";
-		for(int j=0;j<labels_neg.size();j++)
-			cout << labels_neg(j) << ",";
-		cout << endl;*/
+		//cout << "positive labels:";
+		//for(int j=0;j<labels_pos.size();j++)
+		//	cout << labels_pos(j) << ",";
+		//cout << endl;
+		//cout << "negative labels:";
+		//for(int j=0;j<labels_neg.size();j++)
+		//	cout << labels_neg(j) << ",";
+		//cout << endl;
 		//std::cout << "The entropy of this entire set is: " << entropy(labels,unique_labels) << ". Positive branch: " << entropy(labels_pos,unique_labels) << ", negative branch: " << entropy(labels_neg,unique_labels) << endl;
 
 		//for this divider, for each parameter, calculate the resulting entropy
@@ -247,19 +355,12 @@ Node learn_node(MatrixXf csv, VectorXi labels, VectorXi unique_labels){
 		}
 		attempts++;
 	}
-	/*if(d_chosen==-1){
-		lowest_entropy=-1;
-		w_chosen(0)=10.0* ((double)rand() / RAND_MAX) -5;
-		w_chosen(1)=10.0* ((double)rand() / RAND_MAX) -5;
-		d_chosen=rand()%csv.cols();
-		//cout << "Creating random classifier, with d_chosen " << d_chosen << " and w: " << w_chosen.transpose() << endl;
-	}*/
 	Node curnode;
 	curnode.w=w_chosen;
 	curnode.chosen_d=d_chosen;
 	curnode.entropy=lowest_entropy;
 	return curnode;
-}
+}*/
 
 void traverse(Node node){
 	cout << "traversing - ";
@@ -328,23 +429,22 @@ Node learn_tree(MatrixXf X, VectorXi labels, VectorXi unique_labels){
 				//cout << "created leaf with label " << parent.label << endl;
 			}else{
 				//cout << "There are different points here. Learning clasifier." << endl;//labels.transpose() << "\nX:\n" << X << endl;
-				parent = learn_node(X,labels,unique_labels);
-				//recreate relevant X
-				MatrixXf X_dimension(X.rows(),2);
-				for (int i=0;i<X.rows();i++){
-					X_dimension(i,0)=1.0;
-					X_dimension(i,1)=X(i,parent.chosen_d);
-				}
-				//create positive and negative X and labels
-				VectorXf e = X_dimension*parent.w;
+				//try to separate them 1000 times
+				int tries=0;
 				int posrows=0;
 				int negrows=0;
-				for(int j=0;j<X.rows();j++)
-					if(e(j)>0)
-						posrows++;
-					else
-						negrows++;
-
+				while(tries++<1000 && (posrows==0 || negrows==0)){
+					parent = learn_node(X,labels,unique_labels);
+					//create positive and negative X and labels
+					posrows=0;
+					negrows=0;
+					for(int j=0;j<X.rows();j++)
+						if(X(j,parent.chosen_d)>parent.w)
+							posrows++;
+						else
+							negrows++;
+				}
+				cout << "I really tried, man. I tried " << tries-1 << " times, and came up with pos #" << posrows << ", neg #" << negrows << ". Parent d and w are " << parent.chosen_d << " and " << parent.w << endl;
 				VectorXi labels_pos(posrows);
 				MatrixXf X_pos(posrows,X.cols());
 				VectorXi labels_neg(negrows);
@@ -354,7 +454,7 @@ Node learn_tree(MatrixXf X, VectorXi labels, VectorXi unique_labels){
 				negrows=0;//becomes incrementer
 				//place elements in each branch
 				for(int j=0;j<X.rows();j++)
-					if(e(j)>0){
+					if(X(j,parent.chosen_d)>parent.w){
 						for(int k=0;k<X.cols();k++)
 							X_pos(posrows,k)=X(j,k);
 						labels_pos(posrows++)=labels(j);
@@ -364,6 +464,8 @@ Node learn_tree(MatrixXf X, VectorXi labels, VectorXi unique_labels){
 						labels_neg(negrows++)=labels(j);
 					}
 				//cout << "labels: " << labels << "\nX:\n" << X << "\nX_pos:\n" << X_pos << "\nlabels_pos:\n" << labels_pos << "\nX_neg:\n" << X_neg << "\nlabels_neg:\n" << labels_neg << endl;
+				
+				//cout << "entropy from parent: " << entropy(labels,unique_labels) << ", entropy to children: " << entropy(labels_pos,unique_labels) << ", " << entropy(labels_neg,unique_labels) << " (sum: " << (entropy(labels_pos,unique_labels)+entropy(labels_neg,unique_labels)) << ")" << endl;
 				//if either positive or negative labels are empty, simply replace the parent with the new classifier. They can't both be empty. This reflects a classifier that didn't help, and is discarted.
 				if(negrows==0)
 					parent=learn_tree(X_pos,labels_pos,unique_labels);
@@ -442,12 +544,8 @@ Node load_node(ifstream* ifs){
 	}
 	//cout << ", leaf_weight: " << line.c_str() << "->" << node.leaf_weight;
 	getline (*ifs, line);
-	node.w(0) = atof(line.c_str());
-	//cout << ", w(0): " << line.c_str() << "->" << node.w(0);
-	getline (*ifs, line);
-	node.w(1) = atof(line.c_str());
-	//cout << ", w(1): " << line.c_str() << "->" << node.w(1);
-	//cout << endl;
+	node.w = atof(line.c_str());
+	//cout << ", w(0): " << line.c_str() << "->" << node.w;
 	getline (*ifs, line);
 	if(line == "p"){//careful, a node must have either 0 or two children!
 		//cout << "read a pos node:" << endl;
@@ -562,6 +660,8 @@ int main(int argc, char** argv)
 	}
 	std::cout << endl;
 	VectorXi unique_labels(num_unique);
+	for (int i=0;i<num_unique;i++)
+		unique_labels(i)=0;
 	int counter=0;
 	for(int i=0;i<rows-incomplete_rows;i++){
 		if(unique_all(i)!=0){
