@@ -7,14 +7,14 @@ using namespace Eigen;
 
 class Node {
   	public:
-		VectorXf w;
+		float w;
 		std::vector<int> label;
 		float entropy=0.0;
 		int chosen_d=0;
 		std::vector<int> leaf_weight;
 		Node* pos=NULL;
 		Node* neg=NULL;
-	/* Insertion operator
+	//Insertion operator
 	friend std::ostream& operator<<(std::ostream& os, const Node& n)
 	{
 		int t=3;
@@ -33,17 +33,16 @@ class Node {
 			os  << "," << n.leaf_weight[i];
 		os << '\n';		
 
-		os << n.w(0) << '\n';
-		os << n.w(1) << '\n';
+		os << n.w << '\n';
 		if(n.label.empty()){//not a leaf
 			os << "p" << '\n';
-			os << n->pos;
+			os << *(n.pos);
 
 			os << "n" << '\n';
-			os << n->neg;
+			os << *(n.neg);
 		}
 		return os;
-	}*/
+	}
 	Node()
 	{
 		pos = neg = NULL;
@@ -58,20 +57,8 @@ class Node {
 		Node(const Node &n); // copying proibited
 };
 
-/*Node::Node(){
-	pos = neg = NULL;
-	VectorXf w2(2);
-	w2(0)=0;
-	w2(1)=0;
-	w=w2;
-}*/
-
 Node *load_node(ifstream* ifs){
 	Node *node = new Node();
-	VectorXf w2(2);
-	w2(0)=0;
-	w2(1)=0;
-	node->w=w2;
 	string line, token;
 	//cout << "reading node: " << endl;
 	getline (*ifs, line);
@@ -95,9 +82,7 @@ Node *load_node(ifstream* ifs){
 		node->leaf_weight.push_back(atoi(token.c_str()));
 	}
 	getline (*ifs, line);
-	node->w(0) = atof(line.c_str());
-	getline (*ifs, line);
-	node->w(1) = atof(line.c_str());
+	node->w = atof(line.c_str());
 	//cout << endl;
 	getline (*ifs, line);
 	if(line == "p"){//careful, a node must have either 0 or two children!
@@ -122,7 +107,7 @@ void traverse(Node* n){
 }
 
 MatrixXi eval_tree(Node *curnode, VectorXf datapoint){
-	//cout << "evaluating for datapoint: " << datapoint.transpose() << endl << "curnode: " << endl << curnode << endl;
+	//cout << "evaluating for datapoint: " << datapoint.transpose() << endl << "curnode->w: " << curnode->w << " curnode->d: " << curnode->chosen_d << endl;
 	if(curnode->leaf_weight.size()>0){//is a leaf?
 		MatrixXi label_and_weight(curnode->label.size(),2);
 		for(int i=0;i<curnode->label.size();i++){
@@ -131,19 +116,71 @@ MatrixXi eval_tree(Node *curnode, VectorXf datapoint){
 		}
 		return label_and_weight;
 	}else{//a decision node
-		//recreate relevant X
-		VectorXf X_dimension(2);
-		X_dimension(0)=1.0;
-		X_dimension(1)=datapoint(curnode->chosen_d);
-
-		//cout << X_dimension.transpose() << " times " << curnode.w.transpose() << endl;
-		//cout << "that's easy, e is just " << X_dimension.dot(curnode.w) << endl;
-
 		//apply linear classifier
-		if(X_dimension.dot(curnode->w)>0.0)//pos
+		if(datapoint(curnode->chosen_d)>curnode->w)//pos
 			return eval_tree(curnode->pos,datapoint);
 		else//neg
 			return eval_tree(curnode->neg,datapoint);
+	}
+}
+
+//evaluate for datapoint with some unknowns
+MatrixXi eval_tree(Node *curnode, VectorXf datapoint, bool known[]){
+	//cout << "evaluating for datapoint: " << datapoint.transpose() << endl << "curnode->w: " << curnode->w << " curnode->d: " << curnode->chosen_d << endl;
+	if(curnode->leaf_weight.size()>0){//is a leaf?
+		MatrixXi label_and_weight(curnode->label.size(),2);
+		for(int i=0;i<curnode->label.size();i++){
+			label_and_weight(i,0)=curnode->label[i];
+			label_and_weight(i,1)=curnode->leaf_weight[i];
+		}
+		return label_and_weight;
+	}else{//a decision node
+		if(known[curnode->chosen_d]){
+			//apply linear classifier
+			if(datapoint(curnode->chosen_d)>curnode->w)//pos
+				return eval_tree(curnode->pos,datapoint,known);
+			else//neg
+				return eval_tree(curnode->neg,datapoint,known);
+		}else{
+			//don't know which, so combine the two
+			MatrixXi pos=eval_tree(curnode->pos,datapoint,known);
+			MatrixXi neg=eval_tree(curnode->neg,datapoint,known);
+			//cout << "pos:" << endl << pos << endl << "neg:" << endl << neg << endl;
+
+			int unique_labels=pos.rows()+neg.rows();
+			//assume that pos and neg both don't contain duplicates
+			for(int i=0;i<pos.rows();i++){
+				for (int j=0;j<neg.rows();j++){
+					if(pos(i,0)==neg(j,0))
+						unique_labels--;
+				}
+			}
+			MatrixXi combined(unique_labels,2);
+			for(int i=0;i<pos.rows();i++){
+				combined(i,0)=pos(i,0);
+				combined(i,1)=pos(i,1);
+			}
+			//cout << " combined " << endl << combined << endl;
+			int currow=pos.rows();
+			for(int i=0;i<neg.rows();i++){
+				bool isinpos=false;
+				for(int j=0;j<pos.rows();j++)
+					if(pos(j,0)==neg(i,0))
+						isinpos=true;
+				if(!isinpos){
+					combined(currow,0)=neg(i,0);
+					combined(currow++,1)=0;
+				}
+			}
+			//cout << " combined " << endl << combined << endl;
+
+			for(int i=0;i<neg.rows();i++)
+				for(int j=0;j<unique_labels;j++)
+					if(combined(j,0)==neg(i,0))
+						combined(j,1)=combined(j,1)+neg(i,1);
+			//cout << " really combined " << endl << combined << endl;
+			return combined;
+		}
 	}
 }
 
@@ -187,10 +224,33 @@ int main(int argc, char** argv)
 		ffilename=argv[2];
 		fffilename=argv[3];
 	}
+	string token, line;
+
+	std::ifstream ifs(ffilename);
+	getline (ifs, line);
+	std::istringstream ss(line);
+	
+	std::getline(ss, token, ' ');
+	num_trees = atoi(token.c_str());
+	std::vector<Node*> forest;
+	cout << "There are " << num_trees << " trees, reading..." << endl;
+	for (int i=0;i<num_trees;i++)
+		forest.push_back(load_node(&ifs));
+
+	cout << "Loaded forest, number of trees: " << forest.size() << endl;
+	//cout << "first tree: " << forest.front() << endl;
+	//cout << "second tree: " << *forest[1] << endl;
+
+	vector<int> unique_labels = get_unique_labels(forest.front());
+
+	cout << "unique labels: " << endl;
+	for (int i=0;i<unique_labels.size();i++)
+		cout << unique_labels[i] << " - ";
+	cout << endl;
+
 	cout << "reading file " << filename << endl;
 	//read the file twice. Once to count elements per line and #lines
 	ifstream file (filename); 
-	string value, line;
 	int rows=0;
 	int cols=0;
 	int incomplete_rows=0;
@@ -215,85 +275,7 @@ int main(int argc, char** argv)
 	cout << "\nfile has " << rows << " rows with " << cols << " columns each, including " << incomplete_rows << " incomplete rows" << endl;
 
 	file.clear();
-	//and the second time to put everything into a matrix
-	MatrixXf csv(rows-incomplete_rows,cols);
-	string incomplete[incomplete_rows];
-	file.seekg(0, ios::beg);
 
-	std::string token;
-	int i=0;
-	int incomplete_i=0;
-	getline (file, line);
-	while ( file.good() )
-	{
-		std::istringstream ss(line);
-		if(std::count(line.begin(), line.end(), '?')>0)//contains '?'
-			incomplete[incomplete_i++]=line;
-		else{
-			for(int j=0;j<cols;j++){
-				std::getline(ss, token, ',');
-				//std::cout << "(" << j << ", " << i << "):" << token << '\n';
-				csv(i,j) = atof(token.c_str());
-			}
-			++i;
-		}
-		getline (file, line);
-	}
-	//std::cout << "X from file is:\n" << csv << endl;
-	//std::cout << "Y from file is:\n" << labels << endl;
-
-	std::ifstream ifs(ffilename);
-	getline (ifs, line);
-	std::istringstream ss(line);
-	
-	std::getline(ss, token, ' ');
-	num_trees = atoi(token.c_str());
-	std::vector<Node*> forest;
-	cout << "There are " << num_trees << " trees, reading..." << endl;
-	for (int i=0;i<num_trees;i++)
-		forest.push_back(load_node(&ifs));
-
-	cout << "Loaded forest, number of trees: " << forest.size() << endl;
-	//cout << "first tree: " << forest.front() << endl;
-	//cout << "second tree: " << forest[1] << endl;
-
-	vector<int> unique_labels = get_unique_labels(forest.front());
-
-	cout << "unique labels: " << endl;
-	for (int i=0;i<unique_labels.size();i++)
-		cout << unique_labels[i] << " - ";
-	cout << endl;
-
-	MatrixXi result_weights(csv.rows(),unique_labels.size());
-	for (int i=0;i<result_weights.rows();i++)
-		for (int j=0;j<result_weights.cols();j++)
-			result_weights(i,j)=0;
-	for (int i=0;i<csv.rows();i++){
-		VectorXf datapoint(cols);
-		for (int j=0;j<cols;j++)
-			datapoint(j)=csv(i,j);
-		//cout << "evaluating " << num_trees << " trees on point " << i << "/" << csv.rows();
-		for (int j=0;j<num_trees;j++){
-			MatrixXi tmp_res = eval_tree(forest[j],datapoint);
-			//cout << ".";
-			//cout.flush();
-
-			//if(tmp_res.rows()>1)
-			//	cout << "tree " << j << " and point " << i << ": " << endl << tmp_res << endl;//label: " << tmp_res(0) << ", weight: " << tmp_res(1) << endl;
-			for (int k=0;k<unique_labels.size();k++)
-				for (int m=0;m<tmp_res.rows();m++)
-					if(tmp_res(m,0)==unique_labels[k]){
-						result_weights(i,k)=result_weights(i,k)+tmp_res(m,1);
-						//skip rest: k=unique_labels.size();
-					}
-		}
-		VectorXi datapoint_res(unique_labels.size());
-		for (int j=0;j<unique_labels.size();j++)
-			datapoint_res(j)=result_weights(i,j);
-		cout << endl << "point " << i << ", " << datapoint_res.transpose() << endl;
-	}
-	//cout << "results:" << endl << result_weights << endl;
-	
 	//save results to in csv format
 	ofstream classification(fffilename);
 	//print labels, to know which order they are in
@@ -302,11 +284,70 @@ int main(int argc, char** argv)
 		classification << "," << unique_labels[j];
 	classification << endl;
 
-	for(int i=0;i<result_weights.rows();i++){
-		classification << result_weights(i,0);
-		for (int j=1;j<result_weights.cols();j++)
-			classification << "," << result_weights(i,j);
+	//and the second time to put everything into a matrix
+	//MatrixXf csv(rows-incomplete_rows,cols);
+	//string incomplete[incomplete_rows];
+	file.seekg(0, ios::beg);
+
+	int i=0;
+	int incomplete_i=0;
+	getline (file, line);
+	while ( file.good() )
+	{
+		std::istringstream ss(line);
+		VectorXi datapoint_res(unique_labels.size());
+		VectorXf datapoint(cols);
+		for (int j=0;j<unique_labels.size();j++)
+			datapoint_res(j)=0.0f;
+		if(std::count(line.begin(), line.end(), '?')>0){//contains '?'
+			//incomplete[incomplete_i++]=line;
+			cout << line << endl;
+			bool known[cols];
+			for(int j=0;j<cols;j++){
+				std::getline(ss, token, ',');
+				//std::cout << j << " - " << token << '\n';
+				if(token.compare("?") != 0){
+					known[j]=true;
+					datapoint(j) = atof(token.c_str());
+				}else{
+					known[j]=false;
+					datapoint(j) = 0.0f;
+				}
+			}
+			cout << datapoint.transpose() << endl;
+
+			for (int j=0;j<num_trees;j++){
+				MatrixXi tmp_res = eval_tree(forest[j],datapoint,known);
+
+				for (int k=0;k<unique_labels.size();k++)
+					for (int m=0;m<tmp_res.rows();m++)
+						if(tmp_res(m,0)==unique_labels[k])
+							datapoint_res(k)=datapoint_res(k)+tmp_res(m,1);
+			}
+
+		}
+		else{
+			for(int j=0;j<cols;j++){
+				std::getline(ss, token, ',');
+				//std::cout << "(" << j << ", " << i << "):" << token << '\n';
+				datapoint(j) = atof(token.c_str());
+			}
+			cout << datapoint.transpose() << endl;
+			
+			for (int j=0;j<num_trees;j++){
+				MatrixXi tmp_res = eval_tree(forest[j],datapoint);
+
+				for (int k=0;k<unique_labels.size();k++)
+					for (int m=0;m<tmp_res.rows();m++)
+						if(tmp_res(m,0)==unique_labels[k])
+							datapoint_res(k)=datapoint_res(k)+tmp_res(m,1);
+			}
+		}
+		classification << datapoint_res(0);
+		for (int j=1;j<datapoint_res.size();j++)
+			classification << "," << datapoint_res(j);
 		classification << endl;
+		getline (file, line);
 	}
-	classification.close();
+	classification.close();	
 }

@@ -1,11 +1,18 @@
 clear
 
+%convert all instances of ? to NaN
+[s w]=unix('sed -i s/?/NaN/g Wisconsin_Breast_Cancer.csv');
+
 all_data=csvread('Wisconsin_Breast_Cancer.csv');
+
+%convert all instances of NaN to ?
+[s w]=unix('sed -i s/NaN/?/g Wisconsin_Breast_Cancer.csv');
+
 folds=10;
 
 shuffle=randperm(size(all_data,1));
 steps=round(linspace(1,size(all_data,1),folds+1));
-tree_counts=unique(round(logspace(0,5,100)));
+tree_counts=unique(round(logspace(0,5,50)));
 for trees=1:length(tree_counts)
     for i=1:folds
         %disp(['train is [1:' num2str(steps(i)-1) ' ' num2str(steps(i+1)+1) ':end]'])
@@ -18,10 +25,14 @@ for trees=1:length(tree_counts)
         
         csvwrite('cross_validation_train.csv',train);
         csvwrite('cross_validation_test.csv',test);
+        
+        [s w]=unix('sed -i s/NaN/?/g cross_validation_train.csv');
+        [s w]=unix('sed -i s/NaN/?/g cross_validation_test.csv');
+        
         %disp('wrote out cross_validation_train.csv and cross_validation_test.csv')
-tic
+
         [s w]=unix(['C++/forest_train cross_validation_train.csv ' num2str(tree_counts(trees)) ' cross_validation.forest']);
-toc
+        
         [s w]=unix('C++/forest_eval cross_validation_test.csv cross_validation.forest cross_validation.classification');
 
         prediction=csvread('cross_validation.classification');
@@ -53,3 +64,6 @@ toc
 end
 %folds=10, 10 trees, mean(accuracy)=0.9613
 %folds=10, 100 trees, mean(accuracy)=0.9570
+
+figure
+benchmark_forest_vowels
