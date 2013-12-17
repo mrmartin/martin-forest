@@ -1,3 +1,6 @@
 *.forest
 .*
 *~
+./C++/forest_eval
+./C++/forest_train
+
