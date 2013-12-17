@@ -2,8 +2,9 @@ Martin Forest 1.0
 
 by Martin Kolar, 12.2013
 
-Train a random forest of Entropy-reducing trees on a csv input, capable of multiclass classification. The trained forest is a .forest file.
-Evaluate a set of unlabeled data from a csv file, which can handle '?' for unknown values. The output .classification file is a csv of votes from each tree. The votes for each label are added, for selection or ranking applications.
+Train a random forest of Entropy-reducing trees on a csv input, capable of multiclass classification. The trained forest is stored in a .forest file.
+
+Evaluate a set of unlabeled data from a csv file, which can handle '?' for unknown values. The output .classification file is a csv of votes from each tree. The votes for each label are summed over all trees, for selection or ranking applications. A tree may be uncertain when deciding in a node (when the value is '?'), and will follow both branches.
 
 
 COMPILING:
@@ -12,7 +13,25 @@ g++ evaluate_multiclass_forest.cpp -o forest_eval -std=gnu++11
 and
 g++ train_multiclass_forest.cpp -o forest_train -std=gnu++11
 
+
 FILE FORMAT:
+Training file:
+label, value1, value2, value3, ..., valueN
+label, value1, value2, value3, ..., valueN
+
+Testing file:
+value1, value2, value3, ..., valueN
+value1, value2, value3, ..., valueN
+
+Output .classification file:
+label1, label2, label3, ..., labelL (a list of all labels, so that the order is clear)
+votes_label1, votes_label2, votes_label3, ..., votes_labelL
+votes_label1, votes_label2, votes_label3, ..., votes_labelL
+
+(for real examples, see the real world files:
+Training file: Wisconsin_Breast_Cancer_train.csv
+Testing file: Wisconsin_Breast_Cancer_test_nolabels.csv
+Output .classification file: breast.classification
 
 
 USAGE:
