@@ -6,6 +6,7 @@ Train a random forest of Entropy-reducing trees on a csv input, capable of multi
 
 Evaluate a set of unlabeled data from a csv file, which can handle '?' for unknown values. The output .classification file is a csv of votes from each tree. The votes for each label are summed over all trees, for selection or ranking applications. A tree may be uncertain when deciding in a node (when the value is '?'), and will follow both branches.
 
+Example data is the Breast Cancer Wisconsin (Original) Data Set dataset, available http://archive.ics.uci.edu/ml/datasets/Breast+Cancer+Wisconsin+(Original)
 
 COMPILING:
 compile with Eigen (eigen.tuxfamily.org), using

@@ -5,12 +5,15 @@
 using namespace std;
 using namespace Eigen;
 
+static int num_labels=0;
+
 class Node {
   	public:
 		float w;
 		std::vector<int> label;
 		float entropy=0.0;
 		int chosen_d=0;
+		int weight=0;
 		std::vector<int> leaf_weight;
 		Node* pos=NULL;
 		Node* neg=NULL;
@@ -27,6 +30,7 @@ class Node {
 
 		os << n.entropy << '\n';
 		os << n.chosen_d << '\n';
+		os << n.weight << '\n';
 		//os << t << "," << n.leaf_weight << '\n';
 		os << n.leaf_weight.size();
 		for(int i=0;i<n.leaf_weight.size();i++)
@@ -73,6 +77,8 @@ Node *load_node(ifstream* ifs){
 	node->entropy = atof(line.c_str());
 	getline (*ifs, line);
 	node->chosen_d = atoi(line.c_str());
+	getline (*ifs, line);
+	node->weight = atoi(line.c_str());
 	getline (*ifs, line);
 	std::istringstream ss_weights(line);
 	std::getline(ss_weights, token, ',');
@@ -145,7 +151,10 @@ MatrixXi eval_tree(Node *curnode, VectorXf datapoint, bool known[]){
 			//don't know which, so combine the two
 			MatrixXi pos=eval_tree(curnode->pos,datapoint,known);
 			MatrixXi neg=eval_tree(curnode->neg,datapoint,known);
+			//cout << "at unknown " << curnode->chosen_d << "(weight " << curnode->weight << "), entropy is " << curnode->entropy << " and could go to " << curnode->pos->entropy << "(weight " << curnode->pos->weight << ") or " << curnode->neg->entropy << "(weight " << curnode->neg->weight << ")." << endl;
 			//cout << "pos:" << endl << pos << endl << "neg:" << endl << neg << endl;
+			//cout << "mean weighted child entropy is " << ((curnode->pos->entropy*curnode->pos->weight)+(curnode->neg->entropy*curnode->neg->weight))/curnode->weight << endl;
+			cout << "if I knew " << curnode->chosen_d << " the entropy would (on average) go down by " << (curnode->entropy-((curnode->pos->entropy*curnode->pos->weight)+(curnode->neg->entropy*curnode->neg->weight))/curnode->weight) << endl;
 
 			int unique_labels=pos.rows()+neg.rows();
 			//assume that pos and neg both don't contain duplicates
@@ -214,15 +223,20 @@ int main(int argc, char** argv)
 	char* filename;
 	char* ffilename;
 	char* fffilename;
+	char* ffffilename;
+	ffffilename=NULL;
 	int num_trees;
-	if( argc != 4)
+	if( argc != 4 && argc != 5 )
 	{
-		cout << "\trequires name of .csv file, forest .forest input file, and .classification output" << endl;
+		cout << "\tusage: " << endl << argv[0] << " test_data.csv learned.forest output.classification" << endl << "or" << endl << argv[0] << " test_data.csv learned.forest output.classification usefulness.entropy" << endl;
 		return -1;
 	}else{
 		filename=argv[1];
 		ffilename=argv[2];
 		fffilename=argv[3];
+		if(argc==5)
+			ffffilename=argv[4];
+			
 	}
 	string token, line;
 
@@ -242,6 +256,8 @@ int main(int argc, char** argv)
 	//cout << "second tree: " << *forest[1] << endl;
 
 	vector<int> unique_labels = get_unique_labels(forest.front());
+
+	num_labels=unique_labels.size();
 
 	cout << "unique labels: " << endl;
 	for (int i=0;i<unique_labels.size();i++)
@@ -284,9 +300,15 @@ int main(int argc, char** argv)
 		classification << "," << unique_labels[j];
 	classification << endl;
 
-	//and the second time to put everything into a matrix
-	//MatrixXf csv(rows-incomplete_rows,cols);
-	//string incomplete[incomplete_rows];
+	ofstream usefulness;
+	if(ffffilename!=NULL)
+		//save usefulness of each information in csv format
+		usefulness.open(ffffilename,ios::binary);
+
+	if(ffffilename!=NULL)
+		usefulness << "zilch" << endl;
+
+
 	file.seekg(0, ios::beg);
 
 	int i=0;
@@ -324,7 +346,6 @@ int main(int argc, char** argv)
 						if(tmp_res(m,0)==unique_labels[k])
 							datapoint_res(k)=datapoint_res(k)+tmp_res(m,1);
 			}
-
 		}
 		else{
 			for(int j=0;j<cols;j++){
@@ -350,4 +371,6 @@ int main(int argc, char** argv)
 		getline (file, line);
 	}
 	classification.close();	
+	if(ffffilename!=NULL)
+		usefulness.close();	
 }

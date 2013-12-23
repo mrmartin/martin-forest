@@ -1,21 +1,21 @@
 #include <iostream>
 #include <fstream>
 #include <random>
-#include <Eigen/Dense>
+#include <sstream>
 using namespace std;
-using namespace Eigen;
 
 class Node {
   	public:
 		float w=0.0f;
-		std::vector<int> label;
+		vector<int> label;
 		float entropy=0.0f;
 		int chosen_d=0;
-		std::vector<int> leaf_weight;
+		int weight=0;
+		vector<int> leaf_weight;
 		Node* pos=NULL;
 		Node* neg=NULL;
 	//Insertion operator
-	friend std::ostream& operator<<(std::ostream& os, const Node& n)
+	friend ostream& operator<<(ostream& os, const Node& n)
 	{
 		int t=3;
 		// write out individual members of s with an end of line between each one
@@ -27,6 +27,7 @@ class Node {
 
 		os << n.entropy << '\n';
 		os << n.chosen_d << '\n';
+		os << n.weight << '\n';
 		//os << t << "," << n.leaf_weight << '\n';
 		os << n.leaf_weight.size();
 		for(int i=0;i<n.leaf_weight.size();i++)
@@ -57,32 +58,32 @@ class Node {
 		Node(const Node &n); // copying proibited
 };
 
-float entropy(VectorXi labels, VectorXi unique_labels){
+float entropy(int labels[], int labels_size, int unique_labels[], int unique_labels_size){
 	//count how many there are of each class
-	VectorXi counts(unique_labels.size());
-	for(int i=0;i<unique_labels.size();i++){
-		counts(i)=0;
-		for(int j=0;j<labels.size();j++)
-			if(labels(j)==unique_labels(i))
-				counts(i)=counts(i)+1;
+	int counts[unique_labels_size];
+	for(int i=0;i<unique_labels_size;i++){
+		counts[i]=0;
+		for(int j=0;j<labels_size;j++)
+			if(labels[j]==unique_labels[i])
+				counts[i]=counts[i]+1;
 	}
-	//std::cout << counts << endl << "-" << endl;
+	//cout << counts << endl << "-" << endl;
 	float entropy=0.0f;
-	for(int i=0;i<counts.size();i++){
-		if(counts(i)>0){
-			float p = (float)counts(i)/labels.size();
+	for(int i=0;i<unique_labels_size;i++){
+		if(counts[i]>0){
+			float p = (float)counts[i]/labels_size;
 			entropy+= log(p)*p;
 		}
 	}
 	return -1*entropy;
 }
 
-std::vector<std::vector<int> > unconditioned_partition (int l){
+vector<vector<int> > unconditioned_partition (int l){
 	if(l<2)
 		cout << "error, partitioning less than one set" << endl;
-	std::vector<std::vector<int> > partitions;
-	partitions.push_back(std::vector<int>());
-	partitions.push_back(std::vector<int>());
+	vector<vector<int> > partitions;
+	partitions.push_back(vector<int>());
+	partitions.push_back(vector<int>());
 
 	//put a random class in each
 	int r1=rand()%l;
@@ -105,14 +106,14 @@ std::vector<std::vector<int> > unconditioned_partition (int l){
 	return partitions;
 }
 
-Node* learn_node(MatrixXf X, VectorXi labels, VectorXi unique_labels, float min[], float max[]){
+Node* learn_node(double X[], int X_cols,int X_rows, int labels[], int labels_size, int unique_labels[], int unique_labels_size, float min[], float max[]){
 	//cout << "things are cool" << endl;
 	Node *curnode = new Node();
-	int d=rand()%X.cols();
+	int d=rand()%X_cols;
 	curnode->chosen_d=d;
 	//find min and max here
-	/*float min=std::numeric_limits<float>::max();
-	float max=std::numeric_limits<float>::min();
+	/*float min=numeric_limits<float>::max();
+	float max=numeric_limits<float>::min();
 	for(int i=0;i<X.rows();i++){
 		if(min>X(i,curnode.chosen_d))
 			min=X(i,curnode.chosen_d);
@@ -123,172 +124,189 @@ Node* learn_node(MatrixXf X, VectorXi labels, VectorXi unique_labels, float min[
 	return curnode;
 }
 
-Node* learn_tree(MatrixXf X, VectorXi labels, VectorXi unique_labels){
+Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_size, int unique_labels[], int unique_labels_size){
 	Node *parent = new Node();
-	if(labels.size()==0)
-		cout << "learn_tree called with labels size 0. size X is (" << X.rows() << " x " << X.cols() << ")" << endl;
+	if(labels_size==0)
+		cout << "learn_tree called with labels size 0. size X is (" << X_rows << " x " << X_cols << ")" << endl;
 	//cout << "creating a node on labels: " << labels.transpose() << endl;
 	//if all the labels are the same, don't learn anything
-	for(int i=1;i<labels.size();i++)
-		if(labels(i-1)!=labels(i)){//need to learn
+	for(int i=1;i<labels_size;i++)
+		if(labels[i-1]!=labels[i]){//need to learn
 			//there are different labels, but the datapoints may be the same. Are they?
 			bool indivisible=true;
-			for(int k=1;indivisible && k<X.rows();k++)
-				for(int j=0;indivisible && j<X.cols();j++)
-					if(X(k-1,j)!=X(k,j))//compare every element of this one against every element of the previous point
+			for(int k=1;indivisible && k<X_rows;k++)
+				for(int j=0;indivisible && j<X_cols;j++)
+					if(X[(k-1)*X_cols+j]!=X[k*X_cols+j])//compare every element of this one against every element of the previous point
 						indivisible=false;
 
 			if(indivisible){
 				//find the unique labels for these points
-				VectorXi unique_local(labels.size());
+				int unique_local[labels_size];
 				int num_unique=0;
 				
-				for(int k=0;k<labels.size();k++){
+				for(int k=0;k<labels_size;k++){
 					//is this the first occurence of this label?
 					bool first=true;
 					for (int j=0;j<k && first;j++)
-						if(labels(k)==labels(j))
+						if(labels[k]==labels[j])
 							first=false;
 					if(!first)
-						unique_local(k)=0;
+						unique_local[k]=0;
 					else{
-						unique_local(k)=labels(k);
+						unique_local[k]=labels[k];
 						num_unique++;
 					}
 				}
-				VectorXi unique_labels_local(num_unique);
+				int unique_labels_local[num_unique];
 				int counter=0;
-				for(int k=0;k<labels.size();k++){
-					if(unique_local(k)!=0){
-						unique_labels_local(counter)=unique_local(k);
+				for(int k=0;k<labels_size;k++){
+					if(unique_local[k]!=0){
+						unique_labels_local[counter]=unique_local[k];
 						++counter;
 					}
 				}
-				VectorXi unique_labels_local_counts(num_unique);
+				int unique_labels_local_counts[num_unique];
 				for (int j=0;j<num_unique;j++){
-					unique_labels_local_counts(j)=0;
-					for (int k=0;k<labels.size();k++)
-						if(unique_labels_local(j)==labels(k))
-							unique_labels_local_counts(j)=unique_labels_local_counts(j)+1;
+					unique_labels_local_counts[j]=0;
+					for (int k=0;k<labels_size;k++)
+						if(unique_labels_local[j]==labels[k])
+							unique_labels_local_counts[j]=unique_labels_local_counts[j]+1;
 				}
-				//std::cout << "There are " << num_unique << " indistinguishable labels: " << unique_labels_local.transpose() << ", and their counts: " << unique_labels_local_counts.transpose() << endl;
+				//cout << "There are " << num_unique << " indistinguishable labels: " << unique_labels_local.transpose() << ", and their counts: " << unique_labels_local_counts.transpose() << endl;
 				//cout << endl << X << endl;
 
 				for(int j=0;j<num_unique;j++){
-					parent->label.push_back(unique_labels_local(j));
-					parent->leaf_weight.push_back(unique_labels_local_counts(j));
+					parent->label.push_back(unique_labels_local[j]);
+					parent->leaf_weight.push_back(unique_labels_local_counts[j]);
 				}
-				parent->entropy=entropy(labels,unique_labels);
+				parent->entropy=entropy(labels,labels_size,unique_labels,unique_labels_size);
+				parent->weight=labels_size;
 				//cout << "created leaf with label " << parent.label << endl;
 			}else{
 				//cout << "There are different points here. Learning clasifier." << endl;//labels.transpose() << "\nX:\n" << X << endl;
 				//try to separate them 1000 times
-				float min[X.cols()];
-				float max[X.cols()];
-				for(int d=0;d<X.cols();d++){
-					min[d]=std::numeric_limits<float>::max();
-					max[d]=std::numeric_limits<float>::min();
-					for(int i=0;i<X.rows();i++){
-						if(min[d]>X(i,d))
-							min[d]=X(i,d);
-						if(max[d]<X(i,d))
-							max[d]=X(i,d);
+				float min[X_cols];
+				float max[X_cols];
+				for(int d=0;d<X_cols;d++){
+					min[d]=numeric_limits<float>::max();
+					max[d]=numeric_limits<float>::min();
+					for(int i=0;i<X_rows;i++){
+						if(min[d]>X[i*X_cols+d])
+							min[d]=X[i*X_cols+d];
+						if(max[d]<X[i*X_cols+d])
+							max[d]=X[i*X_cols+d];
 					}
 				}
 
 				int tries=0;
 				int posrows=0;
 				int negrows=0;
-				float parent_entropy=entropy(labels,unique_labels);
+				float parent_entropy=entropy(labels,labels_size,unique_labels,unique_labels_size);
 				float entropy_sum=parent_entropy;
 				while(tries++<500 && (entropy_sum>=parent_entropy)){
 					delete parent;
-					parent = learn_node(X,labels,unique_labels,min,max);
+					parent = learn_node(X,X_cols,X_rows,labels,labels_size,unique_labels,unique_labels_size,min,max);
 					parent->entropy=parent_entropy;
+					parent->weight=labels_size;
 					//create positive and negative X and labels
 					posrows=0;
 					negrows=0;
-					for(int j=0;j<X.rows();j++)
-						if(X(j,parent->chosen_d)>parent->w)
+					for(int j=0;j<X_rows;j++)
+						if(X[j*X_cols+parent->chosen_d]>parent->w)
 							posrows++;
 						else
 							negrows++;
 
-					VectorXi labels_pos(posrows);
-					MatrixXf X_pos(posrows,X.cols());
-					VectorXi labels_neg(negrows);
-					MatrixXf X_neg(negrows,X.cols());
+					int labels_pos[posrows];
+					double X_pos[posrows*X_cols];
+					int labels_neg[negrows];
+					double X_neg[negrows*X_cols];
 
 					posrows=0;//becomes incrementer
 					negrows=0;//becomes incrementer
 					//place elements in each branch
-					for(int j=0;j<X.rows();j++)
-						if(X(j,parent->chosen_d)>parent->w){
-							for(int k=0;k<X.cols();k++)
-								X_pos(posrows,k)=X(j,k);
-							labels_pos(posrows++)=labels(j);
+					for(int j=0;j<X_rows;j++)
+						if(X[j*X_cols+parent->chosen_d]>parent->w){
+							for(int k=0;k<X_cols;k++)
+								X_pos[posrows*X_cols+k]=X[j*X_cols+k];
+							labels_pos[posrows++]=labels[j];
 						}else{
-							for(int k=0;k<X.cols();k++)
-								X_neg(negrows,k)=X(j,k);
-							labels_neg(negrows++)=labels(j);
+							for(int k=0;k<X_cols;k++)
+								X_neg[negrows*X_cols+k]=X[j*X_cols+k];
+							labels_neg[negrows++]=labels[j];
 						}
-					entropy_sum=entropy(labels_pos,unique_labels)+entropy(labels_neg,unique_labels);
+					entropy_sum=entropy(labels_pos,posrows,unique_labels,unique_labels_size)+entropy(labels_neg,negrows,unique_labels,unique_labels_size);
 				}
 				//cout << "I really tried, man. I tried " << tries-1 << " times, and came up with pos #" << posrows << ", neg #" << negrows << ". Parent d and w are " << parent->chosen_d << " and " << parent->w << ", and the entropy has gone from " << parent_entropy << " to " << entropy_sum << endl;
-				VectorXi labels_pos(posrows);
-				MatrixXf X_pos(posrows,X.cols());
-				VectorXi labels_neg(negrows);
-				MatrixXf X_neg(negrows,X.cols());
+				int labels_pos[posrows];
+				double X_pos[posrows*X_cols];
+				int labels_neg[negrows];
+				double X_neg[negrows*X_cols];
 
 				posrows=0;//becomes incrementer
 				negrows=0;//becomes incrementer
 				//place elements in each branch
-				for(int j=0;j<X.rows();j++)
-					if(X(j,parent->chosen_d)>parent->w){
-						for(int k=0;k<X.cols();k++)
-							X_pos(posrows,k)=X(j,k);
-						labels_pos(posrows++)=labels(j);
+				for(int j=0;j<X_rows;j++)
+					if(X[j*X_cols+parent->chosen_d]>parent->w){
+						for(int k=0;k<X_cols;k++)
+							X_pos[posrows*X_cols+k]=X[j*X_cols+k];
+						labels_pos[posrows++]=labels[j];
 					}else{
-						for(int k=0;k<X.cols();k++)
-							X_neg(negrows,k)=X(j,k);
-						labels_neg(negrows++)=labels(j);
+						for(int k=0;k<X_cols;k++)
+							X_neg[negrows*X_cols+k]=X[j*X_cols+k];
+						labels_neg[negrows++]=labels[j];
 					}
 				//if either positive or negative labels are empty, simply replace the parent with the new classifier. They can't both be empty. This reflects a classifier that didn't help, and is discarted.
 				if(negrows==0){
 					delete parent;
-					parent=learn_tree(X_pos,labels_pos,unique_labels);
+					parent=learn_tree(X_pos,X_cols,posrows,labels_pos,posrows,unique_labels,unique_labels_size);
 				}else if(posrows==0){
 					delete parent;
-					parent=learn_tree(X_neg,labels_neg,unique_labels);
+					parent=learn_tree(X_neg,X_cols,negrows,labels_neg,negrows,unique_labels,unique_labels_size);
 				}else{
-					Node* pos=learn_tree(X_pos,labels_pos,unique_labels);
+					Node* pos=learn_tree(X_pos,X_cols,posrows,labels_pos,posrows,unique_labels,unique_labels_size);
 					parent->pos=pos;
 
-					Node* neg=learn_tree(X_neg,labels_neg,unique_labels);
+					Node* neg=learn_tree(X_neg,X_cols,negrows,labels_neg,negrows,unique_labels,unique_labels_size);
 					parent->neg=neg;
 				}
 			}
 			break;//stop for loop
-		}else if(i==labels.size()-1){//all the same, don't learn
-			parent->label.push_back(labels(0));
-			parent->leaf_weight.push_back(labels.size());
+		}else if(i==labels_size-1){//all the same, don't learn
+			parent->label.push_back(labels[0]);
+			parent->leaf_weight.push_back(labels_size);
 			parent->entropy=0.0f;
+			parent->weight=labels_size;
 		}
-	if(labels.size()==1){//all the same, don't learn
-		parent->label.push_back(labels(0));
+	if(labels_size==1){//all the same, don't learn
+		parent->label.push_back(labels[0]);
 		parent->leaf_weight.push_back(1);
 		parent->entropy=0.0f;
+		parent->weight=labels_size;
 		//cout << "Just one datapoint. Created leaf with label " << parent.label << endl;
 	}
 	return parent;
 }
 
-void save(std::vector<Node*> forest, char* filename){
+void save(vector<Node*> forest, char* filename){
 	ofstream file(filename);
 	file << forest.size() << " trees" << endl;
 	for(int i=0;i<forest.size();i++)
 		file << *forest[i] << "next tree" << endl;
 	file.close();
+}
+
+// returns count of non-overlapping occurrences of 'sub' in 'str'
+int countSubstring(const string& str, const string& sub)
+{
+    if (sub.length() == 0) return 0;
+    int count = 0;
+    for (size_t offset = str.find(sub); offset != string::npos;
+	 offset = str.find(sub, offset + sub.length()))
+    {
+        ++count;
+    }
+    return count;
 }
 
 int main(int argc, char** argv)
@@ -325,11 +343,11 @@ int main(int argc, char** argv)
 	getline (file, line);
 	while ( file.good() )
 	{
-		if(std::count(line.begin(), line.end(), '?')>0)
+		if(line.find("?")!=string::npos)//count(line.begin(), line.end(), '?')>0)
 			incomplete_rows++;
 		int elements;
 		rows++;
-		elements=std::count(line.begin(), line.end(), ',');
+		elements=countSubstring(line, ",");
 		//cout << elements << endl;
 		if(cols==0)
 			cols=elements;
@@ -344,71 +362,78 @@ int main(int argc, char** argv)
 
 	file.clear();
 	//and the second time to put everything into a matrix
-	MatrixXf csv(rows-incomplete_rows,cols-1);
-	VectorXi labels(rows-incomplete_rows);
+	int X_rows=rows-incomplete_rows;
+	int X_cols=cols-1;
+	double csv[X_rows*X_cols];
+	//VectorXi labels(rows-incomplete_rows);
+	int labels[rows-incomplete_rows];
+	int labels_size = rows-incomplete_rows;
 	string incomplete[incomplete_rows];
 	file.seekg(0, ios::beg);
 
-	std::string token;
+	string token;
 	int i=0;
 	int incomplete_i=0;
 	getline (file, line);
 	while ( file.good() )
 	{
-		std::istringstream ss(line);
-		if(std::count(line.begin(), line.end(), '?')>0)//contains '?'
+		istringstream ss(line);
+		if(line.find("?")!=string::npos)//count(line.begin(), line.end(), '?')>0)//contains '?'
 			incomplete[incomplete_i++]=line;
 		else{
-			std::getline(ss, token, ',');
-			labels(i) = atoi(token.c_str());
+			getline(ss, token, ',');
+			labels[i] = atoi(token.c_str());
 			for(int j=0;j<cols-1;j++){
-				std::getline(ss, token, ',');
-				//std::cout << "(" << j << ", " << i << "):" << token << '\n';
-				csv(i,j) = atof(token.c_str());
+				getline(ss, token, ',');
+				//cout << "(" << j << ", " << i << "):" << token << ", at X[" << i*X_cols+j << "]" << '\n';
+				csv[i*X_cols+j] = atof(token.c_str());
 			}
 			++i;
 		}
 		getline (file, line);
 	}
-	//std::cout << "X from file is:\n" << csv << endl;
-	//std::cout << "Y from file is:\n" << labels << endl;
+	//cout << "X from file is:\n" << csv << endl;
+	//cout << "Y from file is:\n" << labels << endl;
 
 	//what are the unique labels?
-	VectorXi unique_all(rows-incomplete_rows);
+	int unique_all[rows-incomplete_rows];
 	int num_unique=0;
 	for(int i=0;i<rows-incomplete_rows;i++){
 		//is this the first occurence of this label?
 		bool first=true;
 		for (int j=0;j<i && first;j++)
-			if(labels(i)==labels(j))
+			if(labels[i]==labels[j])
 				first=false;
 		if(!first)
-			unique_all(i)=0;
+			unique_all[i]=0;
 		else{
-			unique_all(i)=labels(i);
+			unique_all[i]=labels[i];
 			num_unique++;
 		}
 	}
-	std::cout << endl;
-	VectorXi unique_labels(num_unique);
+	cout << endl;
+	int unique_labels[num_unique];
 	for (int i=0;i<num_unique;i++)
-		unique_labels(i)=0;
+		unique_labels[i]=0;
 	int counter=0;
 	for(int i=0;i<rows-incomplete_rows;i++){
-		if(unique_all(i)!=0){
-			unique_labels(counter)=unique_all(i);
+		if(unique_all[i]!=0){
+			unique_labels[counter]=unique_all[i];
 			++counter;
 		}
 	}
-	std::cout << "There are " << num_unique << " unique labels: " << unique_labels.transpose() << endl;
+	cout << "There are " << num_unique << " unique labels: " << endl;//unique_labels.transpose() << endl;
+	for(int i=0;i<num_unique;i++)
+		cout << unique_labels[i] << " ";
+	cout << endl;
 
 	//calculate the entropy. Does not require values X, only labels
-	std::cout << "The entropy of this set is: " << entropy(labels,unique_labels) << endl;
+	cout << "The entropy of this set is: " << entropy(labels,labels_size,unique_labels,num_unique) << endl;
 
 	cout << "\nStarting learning " << num_trees << " trees" << endl;
-	std::vector<Node*> forest;
+	vector<Node*> forest;
 	for (int i=0;i<num_trees;i++){
-		forest.push_back(learn_tree(csv,labels,unique_labels));
+		forest.push_back(learn_tree(csv,X_cols,X_rows,labels,labels_size,unique_labels,num_unique));
 	}
 	cout << "... learning complete" << endl;
 
@@ -425,11 +450,11 @@ int main(int argc, char** argv)
 		cout << " learned w: " << parent.w.transpose() << endl;
 	}*/
 
-	/*std::ifstream ifs(outfilename);
+	/*ifstream ifs(outfilename);
 	getline (ifs, line);
-	std::istringstream ss(line);
+	istringstream ss(line);
 	
-	std::getline(ss, token, ' ');
+	getline(ss, token, ' ');
 	cout << "number of trees: " << atoi(token.c_str()) << endl;
 	Node node_from_file = load_node(&ifs);
 	cout << "second tree:" << endl;
