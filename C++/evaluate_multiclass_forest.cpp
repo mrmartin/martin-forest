@@ -11,12 +11,12 @@ class Node {
   	public:
 		float w;
 		std::vector<int> label;
-		float entropy=0.0;
-		int chosen_d=0;
-		int weight=0;
+		float entropy;
+		int chosen_d;
+		int weight;
 		std::vector<int> leaf_weight;
-		Node* pos=NULL;
-		Node* neg=NULL;
+		Node* pos;
+		Node* neg;
 	//Insertion operator
 	friend std::ostream& operator<<(std::ostream& os, const Node& n)
 	{
@@ -49,6 +49,9 @@ class Node {
 	}
 	Node()
 	{
+		entropy=0.0;
+		chosen_d=0;
+		weight=0;
 		pos = neg = NULL;
 	}
 	~Node()
