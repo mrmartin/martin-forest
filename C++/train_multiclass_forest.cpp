@@ -6,14 +6,14 @@ using namespace std;
 
 class Node {
   	public:
-		float w=0.0f;
+		float w;
 		vector<int> label;
-		float entropy=0.0f;
-		int chosen_d=0;
-		int weight=0;
+		float entropy;
+		int chosen_d;
+		int weight;
 		vector<int> leaf_weight;
-		Node* pos=NULL;
-		Node* neg=NULL;
+		Node* pos;
+		Node* neg;
 	//Insertion operator
 	friend ostream& operator<<(ostream& os, const Node& n)
 	{
@@ -46,6 +46,10 @@ class Node {
 	}
 	Node()
 	{
+        w=0.0f;
+        entropy=0.0f;
+        chosen_d=0;
+		weight=0;
 		pos = neg = NULL;
 	}
 	~Node()
@@ -218,30 +222,30 @@ Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_si
 							negrows++;
 
 					int labels_pos[posrows];
-					double X_pos[posrows*X_cols];
+					//double X_pos[posrows*X_cols];
 					int labels_neg[negrows];
-					double X_neg[negrows*X_cols];
+					//double X_neg[negrows*X_cols];
 
 					posrows=0;//becomes incrementer
 					negrows=0;//becomes incrementer
 					//place elements in each branch
 					for(int j=0;j<X_rows;j++)
 						if(X[j*X_cols+parent->chosen_d]>parent->w){
-							for(int k=0;k<X_cols;k++)
-								X_pos[posrows*X_cols+k]=X[j*X_cols+k];
+							//for(int k=0;k<X_cols;k++)
+							//	X_pos[posrows*X_cols+k]=X[j*X_cols+k];
 							labels_pos[posrows++]=labels[j];
 						}else{
-							for(int k=0;k<X_cols;k++)
-								X_neg[negrows*X_cols+k]=X[j*X_cols+k];
+							//for(int k=0;k<X_cols;k++)
+							//	X_neg[negrows*X_cols+k]=X[j*X_cols+k];
 							labels_neg[negrows++]=labels[j];
 						}
 					entropy_sum=entropy(labels_pos,posrows,unique_labels,unique_labels_size)+entropy(labels_neg,negrows,unique_labels,unique_labels_size);
 				}
 				//cout << "I really tried, man. I tried " << tries-1 << " times, and came up with pos #" << posrows << ", neg #" << negrows << ". Parent d and w are " << parent->chosen_d << " and " << parent->w << ", and the entropy has gone from " << parent_entropy << " to " << entropy_sum << endl;
 				int labels_pos[posrows];
-				double X_pos[posrows*X_cols];
+				double* X_pos = new double[posrows*X_cols];
 				int labels_neg[negrows];
-				double X_neg[negrows*X_cols];
+				double* X_neg = new double[negrows*X_cols];
 
 				posrows=0;//becomes incrementer
 				negrows=0;//becomes incrementer
@@ -260,15 +264,19 @@ Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_si
 				if(negrows==0){
 					delete parent;
 					parent=learn_tree(X_pos,X_cols,posrows,labels_pos,posrows,unique_labels,unique_labels_size);
+                    delete[] X_pos;
 				}else if(posrows==0){
 					delete parent;
 					parent=learn_tree(X_neg,X_cols,negrows,labels_neg,negrows,unique_labels,unique_labels_size);
+                    delete[] X_neg;
 				}else{
 					Node* pos=learn_tree(X_pos,X_cols,posrows,labels_pos,posrows,unique_labels,unique_labels_size);
 					parent->pos=pos;
+                    delete[] X_pos;
 
 					Node* neg=learn_tree(X_neg,X_cols,negrows,labels_neg,negrows,unique_labels,unique_labels_size);
 					parent->neg=neg;
+                    delete[] X_neg;
 				}
 			}
 			break;//stop for loop
