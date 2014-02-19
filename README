@@ -1,4 +1,4 @@
-Martin Forest 1.0
+Martin Forest 1.1
 
 by Martin Kolar, 12.2013
 
@@ -9,11 +9,13 @@ Evaluate a set of unlabeled data from a csv file, which can handle '?' for unkno
 Example data is the Breast Cancer Wisconsin (Original) Data Set dataset, available http://archive.ics.uci.edu/ml/datasets/Breast+Cancer+Wisconsin+(Original)
 
 COMPILING:
-compile with Eigen (eigen.tuxfamily.org), using
-g++ evaluate_multiclass_forest.cpp -o forest_eval -std=gnu++11
-and
-g++ train_multiclass_forest.cpp -o forest_train -std=gnu++11
+make
 
+INSTALLING:
+make install
+
+TESTING:
+make test
 
 FILE FORMAT:
 Training file:
