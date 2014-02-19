@@ -82,7 +82,7 @@ float entropy(int labels[], int labels_size, int unique_labels[], int unique_lab
 	return -1*entropy;
 }
 
-vector<vector<int> > unconditioned_partition (int l){
+vector<vector<int>> unconditioned_partition (int l){
 	if(l<2)
 		cout << "error, partitioning less than one set" << endl;
 	vector<vector<int> > partitions;

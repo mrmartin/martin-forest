@@ -1,9 +1,8 @@
 #include <iostream>
 #include <fstream>
 #include <random>
-#include <Eigen/Dense>
+#include <sstream>
 using namespace std;
-using namespace Eigen;
 
 static int num_labels=0;
 
@@ -115,18 +114,20 @@ void traverse(Node* n){
 		traverse(node.neg);
 }
 
-MatrixXi eval_tree(Node *curnode, VectorXf datapoint){
+vector<int*> eval_tree(Node *curnode, float datapoint[]){
 	//cout << "evaluating for datapoint: " << datapoint.transpose() << endl << "curnode->w: " << curnode->w << " curnode->d: " << curnode->chosen_d << endl;
 	if(curnode->leaf_weight.size()>0){//is a leaf?
-		MatrixXi label_and_weight(curnode->label.size(),2);
+		vector<int*> label_and_weight;
 		for(int i=0;i<curnode->label.size();i++){
-			label_and_weight(i,0)=curnode->label[i];
-			label_and_weight(i,1)=curnode->leaf_weight[i];
+			int* this_label = new int(2);
+			this_label[0]=curnode->label[i];
+			this_label[1]=curnode->leaf_weight[i];
+			label_and_weight.push_back(this_label);
 		}
 		return label_and_weight;
 	}else{//a decision node
 		//apply linear classifier
-		if(datapoint(curnode->chosen_d)>curnode->w)//pos
+		if(datapoint[curnode->chosen_d]>curnode->w)//pos
 			return eval_tree(curnode->pos,datapoint);
 		else//neg
 			return eval_tree(curnode->neg,datapoint);
@@ -134,64 +135,67 @@ MatrixXi eval_tree(Node *curnode, VectorXf datapoint){
 }
 
 //evaluate for datapoint with some unknowns
-MatrixXi eval_tree(Node *curnode, VectorXf datapoint, bool known[]){
+vector<int*> eval_tree_unknowns(Node *curnode, float datapoint[], bool known[]){
 	//cout << "evaluating for datapoint: " << datapoint.transpose() << endl << "curnode->w: " << curnode->w << " curnode->d: " << curnode->chosen_d << endl;
 	if(curnode->leaf_weight.size()>0){//is a leaf?
-		MatrixXi label_and_weight(curnode->label.size(),2);
+		vector<int*> label_and_weight;
 		for(int i=0;i<curnode->label.size();i++){
-			label_and_weight(i,0)=curnode->label[i];
-			label_and_weight(i,1)=curnode->leaf_weight[i];
+			int* this_label = new int(2);
+			this_label[0]=curnode->label[i];
+			this_label[1]=curnode->leaf_weight[i];
+			label_and_weight.push_back(this_label);
 		}
 		return label_and_weight;
 	}else{//a decision node
 		if(known[curnode->chosen_d]){
 			//apply linear classifier
-			if(datapoint(curnode->chosen_d)>curnode->w)//pos
-				return eval_tree(curnode->pos,datapoint,known);
+			if(datapoint[curnode->chosen_d]>curnode->w)//pos
+				return eval_tree_unknowns(curnode->pos,datapoint,known);
 			else//neg
-				return eval_tree(curnode->neg,datapoint,known);
+				return eval_tree_unknowns(curnode->neg,datapoint,known);
 		}else{
 			//don't know which, so combine the two
-			MatrixXi pos=eval_tree(curnode->pos,datapoint,known);
-			MatrixXi neg=eval_tree(curnode->neg,datapoint,known);
-			//cout << "at unknown " << curnode->chosen_d << "(weight " << curnode->weight << "), entropy is " << curnode->entropy << " and could go to " << curnode->pos->entropy << "(weight " << curnode->pos->weight << ") or " << curnode->neg->entropy << "(weight " << curnode->neg->weight << ")." << endl;
-			//cout << "pos:" << endl << pos << endl << "neg:" << endl << neg << endl;
-			//cout << "mean weighted child entropy is " << ((curnode->pos->entropy*curnode->pos->weight)+(curnode->neg->entropy*curnode->neg->weight))/curnode->weight << endl;
-			cout << "if I knew " << curnode->chosen_d << " the entropy would (on average) go down by " << (curnode->entropy-((curnode->pos->entropy*curnode->pos->weight)+(curnode->neg->entropy*curnode->neg->weight))/curnode->weight) << endl;
-
-			int unique_labels=pos.rows()+neg.rows();
-			//assume that pos and neg both don't contain duplicates
-			for(int i=0;i<pos.rows();i++){
-				for (int j=0;j<neg.rows();j++){
-					if(pos(i,0)==neg(j,0))
-						unique_labels--;
-				}
-			}
-			MatrixXi combined(unique_labels,2);
-			for(int i=0;i<pos.rows();i++){
-				combined(i,0)=pos(i,0);
-				combined(i,1)=pos(i,1);
-			}
-			//cout << " combined " << endl << combined << endl;
-			int currow=pos.rows();
-			for(int i=0;i<neg.rows();i++){
-				bool isinpos=false;
-				for(int j=0;j<pos.rows();j++)
-					if(pos(j,0)==neg(i,0))
-						isinpos=true;
-				if(!isinpos){
-					combined(currow,0)=neg(i,0);
-					combined(currow++,1)=0;
-				}
-			}
-			//cout << " combined " << endl << combined << endl;
-
-			for(int i=0;i<neg.rows();i++)
-				for(int j=0;j<unique_labels;j++)
-					if(combined(j,0)==neg(i,0))
-						combined(j,1)=combined(j,1)+neg(i,1);
-			//cout << " really combined " << endl << combined << endl;
+			vector<int*> pos=eval_tree_unknowns(curnode->pos,datapoint,known);
+			vector<int*> neg=eval_tree_unknowns(curnode->neg,datapoint,known);
+			//combine silly way, without checking for duplicates
+			vector<int*> combined;
+			
+			for(int j=0;j<pos.size();j++)
+				combined.push_back(pos.at(j));
+			for(int j=0;j<neg.size();j++)
+				combined.push_back(neg.at(j));
 			return combined;
+		}
+	}
+}
+
+//evaluate for datapoint with some unknowns
+int* eval_tree_importance(Node *curnode, float datapoint[], bool known[], int numfeatures){
+	//cout << "evaluating for datapoint: " << datapoint.transpose() << endl << "curnode->w: " << curnode->w << " curnode->d: " << curnode->chosen_d << endl;
+	if(curnode->leaf_weight.size()>0){//is a leaf?
+		int* zeros = new int(numfeatures);
+		for (int i=0;i<numfeatures;i++)
+			zeros[i]=0;
+		return zeros;
+	}else{//a decision node
+		if(known[curnode->chosen_d]){
+			//apply linear classifier
+			if(datapoint[curnode->chosen_d]>curnode->w)//pos
+				return eval_tree_importance(curnode->pos,datapoint,known,numfeatures);
+			else//neg
+				return eval_tree_importance(curnode->neg,datapoint,known,numfeatures);
+		}else{
+
+			cout << "adding to pos_en[" << curnode->chosen_d << "]" << endl;
+			//don't know which, so combine the two
+			int* pos_en = eval_tree_importance(curnode->pos,datapoint,known,numfeatures);
+			int* neg_en = eval_tree_importance(curnode->neg,datapoint,known,numfeatures);
+			//for (int i=0;i<numfeatures;i++)
+			//	pos_en[i] = pos_en[i]+neg_en[i];
+			delete[] neg_en;
+			pos_en[curnode->chosen_d]=pos_en[curnode->chosen_d]+(curnode->entropy-((curnode->pos->entropy*curnode->pos->weight)+(curnode->neg->entropy*curnode->neg->weight))/curnode->weight);
+			cout << "(importance) if I knew " << curnode->chosen_d << " the entropy would (on average) go down by " << (curnode->entropy-((curnode->pos->entropy*curnode->pos->weight)+(curnode->neg->entropy*curnode->neg->weight))/curnode->weight) << endl;
+			return pos_en;
 		}
 	}
 }
@@ -218,6 +222,19 @@ vector<int> get_unique_labels(Node *curnode){
 		}
 		return neg;
 	}
+}
+
+// returns count of non-overlapping occurrences of 'sub' in 'str'
+int countSubstring(const string& str, const string& sub)
+{
+    if (sub.length() == 0) return 0;
+    int count = 0;
+    for (size_t offset = str.find(sub); offset != string::npos;
+	 offset = str.find(sub, offset + sub.length()))
+    {
+        ++count;
+    }
+    return count;
 }
 
 int main(int argc, char** argv)
@@ -276,11 +293,11 @@ int main(int argc, char** argv)
 	getline (file, line);
 	while ( file.good() )
 	{
-		if(std::count(line.begin(), line.end(), '?')>0)
+		if(line.find("?")!=string::npos)//if(std::count(line.begin(), line.end(), '?')>0)
 			incomplete_rows++;
 		int elements;
 		rows++;
-		elements=std::count(line.begin(), line.end(), ',');
+		elements=countSubstring(line, ",");
 		//cout << elements << endl;
 		if(cols==0)
 			cols=elements;
@@ -320,11 +337,11 @@ int main(int argc, char** argv)
 	while ( file.good() )
 	{
 		std::istringstream ss(line);
-		VectorXi datapoint_res(unique_labels.size());
-		VectorXf datapoint(cols);
+		float datapoint_res[unique_labels.size()];
+		float datapoint[cols];
 		for (int j=0;j<unique_labels.size();j++)
-			datapoint_res(j)=0.0f;
-		if(std::count(line.begin(), line.end(), '?')>0){//contains '?'
+			datapoint_res[j]=0.0f;
+		if(line.find("?")!=string::npos){//count(line.begin(), line.end(), '?')>0)//contains '?'
 			//incomplete[incomplete_i++]=line;
 			//cout << line << endl;
 			bool known[cols];
@@ -333,47 +350,62 @@ int main(int argc, char** argv)
 				//std::cout << j << " - " << token << '\n';
 				if(token.compare("?") != 0){
 					known[j]=true;
-					datapoint(j) = atof(token.c_str());
+					datapoint[j] = atof(token.c_str());
 				}else{
 					known[j]=false;
-					datapoint(j) = 0.0f;
+					datapoint[j] = 0.0f;
 				}
 			}
-			//cout << datapoint.transpose() << endl;
 
 			for (int j=0;j<num_trees;j++){
-				MatrixXi tmp_res = eval_tree(forest[j],datapoint,known);
+				vector<int*> tmp_res = eval_tree_unknowns(forest[j],datapoint,known);
+
+				//cout << tmp_res.transpose() << endl;
 
 				for (int k=0;k<unique_labels.size();k++)
-					for (int m=0;m<tmp_res.rows();m++)
-						if(tmp_res(m,0)==unique_labels[k])
-							datapoint_res(k)=datapoint_res(k)+tmp_res(m,1);
+					for (int m=0;m<tmp_res.size();m++)
+						if(tmp_res.at(m)[0]==unique_labels[k])
+							datapoint_res[k]=datapoint_res[k]+tmp_res.at(m)[1];
+				for(int k=0;k<tmp_res.size();k++)
+					delete[] tmp_res.at(k);
+
+				/*cout << "the usfuleness across one datapoint in one tree is:" << endl;
+				int* importance = eval_tree_importance(forest[j],datapoint, known, cols);
+				for (int i=0;i<cols;i++)
+					cout << importance[i] << ", ";
+				cout << endl;
+				delete[] importance;*/
 			}
 		}
 		else{
 			for(int j=0;j<cols;j++){
 				std::getline(ss, token, ',');
 				//std::cout << "(" << j << ", " << i << "):" << token << '\n';
-				datapoint(j) = atof(token.c_str());
+				datapoint[j] = atof(token.c_str());
 			}
 			//cout << datapoint.transpose() << endl;
 			
 			for (int j=0;j<num_trees;j++){
-				MatrixXi tmp_res = eval_tree(forest[j],datapoint);
+				vector<int*> tmp_res = eval_tree(forest[j],datapoint);
+
+				//cout << tmp_res.transpose() << endl;
 
 				for (int k=0;k<unique_labels.size();k++)
-					for (int m=0;m<tmp_res.rows();m++)
-						if(tmp_res(m,0)==unique_labels[k])
-							datapoint_res(k)=datapoint_res(k)+tmp_res(m,1);
+					for (int m=0;m<tmp_res.size();m++)
+						if(tmp_res.at(m)[0]==unique_labels[k])
+							datapoint_res[k]=datapoint_res[k]+tmp_res.at(m)[1];
+				for(int k=0;k<tmp_res.size();k++)
+					delete[] tmp_res.at(k);
 			}
+			
 		}
-		classification << datapoint_res(0);
-		for (int j=1;j<datapoint_res.size();j++)
-			classification << "," << datapoint_res(j);
+		classification << datapoint_res[0];
+		for (int j=1;j<unique_labels.size();j++)
+			classification << "," << datapoint_res[j];
 		classification << endl;
 		getline (file, line);
 	}
-	classification.close();	
+	classification.close();
 	if(ffffilename!=NULL)
 		usefulness.close();	
 }
