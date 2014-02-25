@@ -170,31 +170,38 @@ vector<int*> eval_tree_unknowns(Node *curnode, float datapoint[], bool known[]){
 }
 
 //evaluate for datapoint with some unknowns
-int* eval_tree_importance(Node *curnode, float datapoint[], bool known[], int numfeatures){
+float* eval_tree_importance(Node *curnode, float* datapoint, bool* known, int numfeatures){
 	//cout << "evaluating for datapoint: " << datapoint.transpose() << endl << "curnode->w: " << curnode->w << " curnode->d: " << curnode->chosen_d << endl;
+	//cout << "another node with size " << curnode->leaf_weight.size() << endl;
 	if(curnode->leaf_weight.size()>0){//is a leaf?
-		int* zeros = new int(numfeatures);
+		float* zeros = new float[numfeatures];
 		for (int i=0;i<numfeatures;i++)
 			zeros[i]=0;
 		return zeros;
 	}else{//a decision node
+		//cout << "looking at " << curnode->chosen_d << endl;
 		if(known[curnode->chosen_d]){
+			//cout << "applying linear classifier ... ";
 			//apply linear classifier
-			if(datapoint[curnode->chosen_d]>curnode->w)//pos
+			if(datapoint[curnode->chosen_d]>curnode->w){//pos
+				//cout << "going to pos" << endl;
 				return eval_tree_importance(curnode->pos,datapoint,known,numfeatures);
-			else//neg
+			}else{//neg
+				//cout << "going to neg" << endl;
 				return eval_tree_importance(curnode->neg,datapoint,known,numfeatures);
+			}
 		}else{
-
-			cout << "adding to pos_en[" << curnode->chosen_d << "]" << endl;
+			//cout << "It's unknown. clculating importance and adding it to pos_en[" << curnode->chosen_d << "]" << endl;
 			//don't know which, so combine the two
-			int* pos_en = eval_tree_importance(curnode->pos,datapoint,known,numfeatures);
-			int* neg_en = eval_tree_importance(curnode->neg,datapoint,known,numfeatures);
-			//for (int i=0;i<numfeatures;i++)
-			//	pos_en[i] = pos_en[i]+neg_en[i];
+			float* pos_en = eval_tree_importance(curnode->pos,datapoint,known,numfeatures);
+			float* neg_en = eval_tree_importance(curnode->neg,datapoint,known,numfeatures);
+			for (int i=0;i<numfeatures;i++)
+				pos_en[i] = pos_en[i]+neg_en[i];
 			delete[] neg_en;
 			pos_en[curnode->chosen_d]=pos_en[curnode->chosen_d]+(curnode->entropy-((curnode->pos->entropy*curnode->pos->weight)+(curnode->neg->entropy*curnode->neg->weight))/curnode->weight);
-			cout << "(importance) if I knew " << curnode->chosen_d << " the entropy would (on average) go down by " << (curnode->entropy-((curnode->pos->entropy*curnode->pos->weight)+(curnode->neg->entropy*curnode->neg->weight))/curnode->weight) << endl;
+			//cout << "(importance) if I knew " << curnode->chosen_d << " the entropy would (on average) go down by " << (curnode->entropy-((curnode->pos->entropy*curnode->pos->weight)+(curnode->neg->entropy*curnode->neg->weight))/curnode->weight) << endl;
+
+			//cout << "returning " << pos_en+neg_en+1 << endl;
 			return pos_en;
 		}
 	}
@@ -240,27 +247,27 @@ int countSubstring(const string& str, const string& sub)
 int main(int argc, char** argv)
 {
 	srand(time(NULL)); /* seed random number generator */
-	char* filename;
-	char* ffilename;
-	char* fffilename;
-	char* ffffilename;
-	ffffilename=NULL;
+	char* test_csv_filename;
+	char* forest_filename;
+	char* output_classification_filename;
+	char* usefulness_filename;
+	usefulness_filename=NULL;
 	int num_trees;
 	if( argc != 4 && argc != 5 )
 	{
 		cout << "\tusage: " << endl << argv[0] << " test_data.csv learned.forest output.classification" << endl << "or" << endl << argv[0] << " test_data.csv learned.forest output.classification usefulness.entropy" << endl;
 		return -1;
 	}else{
-		filename=argv[1];
-		ffilename=argv[2];
-		fffilename=argv[3];
+		test_csv_filename=argv[1];
+		forest_filename=argv[2];
+		output_classification_filename=argv[3];
 		if(argc==5)
-			ffffilename=argv[4];
+			usefulness_filename=argv[4];
 			
 	}
 	string token, line;
 
-	std::ifstream ifs(ffilename);
+	std::ifstream ifs(forest_filename);
 	getline (ifs, line);
 	std::istringstream ss(line);
 	
@@ -284,9 +291,9 @@ int main(int argc, char** argv)
 		cout << unique_labels[i] << " - ";
 	cout << endl;
 
-	cout << "reading file " << filename << endl;
+	cout << "reading file " << test_csv_filename << endl;
 	//read the file twice. Once to count elements per line and #lines
-	ifstream file (filename); 
+	ifstream file (test_csv_filename); 
 	int rows=0;
 	int cols=0;
 	int incomplete_rows=0;
@@ -313,7 +320,7 @@ int main(int argc, char** argv)
 	file.clear();
 
 	//save results to in csv format
-	ofstream classification(fffilename);
+	ofstream classification(output_classification_filename);
 	//print labels, to know which order they are in
 	classification << unique_labels[0];
 	for (int j=1;j<unique_labels.size();j++)
@@ -321,13 +328,9 @@ int main(int argc, char** argv)
 	classification << endl;
 
 	ofstream usefulness;
-	if(ffffilename!=NULL)
+	if(usefulness_filename!=NULL)
 		//save usefulness of each information in csv format
-		usefulness.open(ffffilename,ios::binary);
-
-	if(ffffilename!=NULL)
-		usefulness << "zilch" << endl;
-
+		usefulness.open(usefulness_filename,ios::binary);
 
 	file.seekg(0, ios::beg);
 
@@ -336,18 +339,26 @@ int main(int argc, char** argv)
 	getline (file, line);
 	while ( file.good() )
 	{
+		float* total_importance;
+		if(usefulness_filename!=NULL){
+			total_importance = new float[cols];
+			for (int i=0;i<cols;i++)
+				total_importance[i] = 0;
+		}
 		std::istringstream ss(line);
 		float datapoint_res[unique_labels.size()];
 		float datapoint[cols];
 		for (int j=0;j<unique_labels.size();j++)
 			datapoint_res[j]=0.0f;
+		if(line.find(" ")!=string::npos)
+			cout << "Warning! There are spaces in your test csv." << endl;
 		if(line.find("?")!=string::npos){//count(line.begin(), line.end(), '?')>0)//contains '?'
 			//incomplete[incomplete_i++]=line;
 			//cout << line << endl;
 			bool known[cols];
 			for(int j=0;j<cols;j++){
 				std::getline(ss, token, ',');
-				//std::cout << j << " - " << token << '\n';
+				//std::cout << j << " - " << token;
 				if(token.compare("?") != 0){
 					known[j]=true;
 					datapoint[j] = atof(token.c_str());
@@ -355,6 +366,7 @@ int main(int argc, char** argv)
 					known[j]=false;
 					datapoint[j] = 0.0f;
 				}
+				//cout << known[j] << "," << endl;
 			}
 
 			for (int j=0;j<num_trees;j++){
@@ -369,12 +381,17 @@ int main(int argc, char** argv)
 				for(int k=0;k<tmp_res.size();k++)
 					delete[] tmp_res.at(k);
 
-				/*cout << "the usfuleness across one datapoint in one tree is:" << endl;
-				int* importance = eval_tree_importance(forest[j],datapoint, known, cols);
-				for (int i=0;i<cols;i++)
-					cout << importance[i] << ", ";
-				cout << endl;
-				delete[] importance;*/
+				
+				if(usefulness_filename!=NULL){//calculate importance
+					float* importance = eval_tree_importance(forest[j],datapoint, known, cols);
+					for (int i=0;i<cols;i++){
+						//cout << importance[i] << ", ";
+						total_importance[i] += importance[i];
+					}
+					//cout << endl;
+					delete[] importance;
+					//cout << "importance is :" << importance << endl;
+				}
 			}
 		}
 		else{
@@ -403,9 +420,16 @@ int main(int argc, char** argv)
 		for (int j=1;j<unique_labels.size();j++)
 			classification << "," << datapoint_res[j];
 		classification << endl;
+
+		if(usefulness_filename!=NULL){
+			usefulness << total_importance[i];
+			for (int i=1;i<cols;i++)
+				usefulness << "," << total_importance[i];
+			usefulness << endl;
+		}
 		getline (file, line);
 	}
 	classification.close();
-	if(ffffilename!=NULL)
+	if(usefulness_filename!=NULL)
 		usefulness.close();	
 }

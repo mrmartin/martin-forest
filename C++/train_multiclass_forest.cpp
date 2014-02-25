@@ -264,19 +264,19 @@ Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_si
 				if(negrows==0){
 					delete parent;
 					parent=learn_tree(X_pos,X_cols,posrows,labels_pos,posrows,unique_labels,unique_labels_size);
-                    delete[] X_pos;
+                    			delete[] X_pos;
 				}else if(posrows==0){
 					delete parent;
 					parent=learn_tree(X_neg,X_cols,negrows,labels_neg,negrows,unique_labels,unique_labels_size);
-                    delete[] X_neg;
+                    			delete[] X_neg;
 				}else{
 					Node* pos=learn_tree(X_pos,X_cols,posrows,labels_pos,posrows,unique_labels,unique_labels_size);
 					parent->pos=pos;
-                    delete[] X_pos;
+                   			delete[] X_pos;
 
 					Node* neg=learn_tree(X_neg,X_cols,negrows,labels_neg,negrows,unique_labels,unique_labels_size);
 					parent->neg=neg;
-                    delete[] X_neg;
+                    			delete[] X_neg;
 				}
 			}
 			break;//stop for loop
