@@ -128,7 +128,16 @@ Node* learn_node(double X[], int X_cols,int X_rows, int labels[], int labels_siz
 	return curnode;
 }
 
-Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_size, int unique_labels[], int unique_labels_size){
+Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_size, int unique_labels[], int unique_labels_size, int selected_X[], int num_selected){
+	/*cout << "selected_X is:" << endl;
+	for (int i=0;i<num_selected;i++)
+		cout << selected_X[i] << ", ";
+	cout << endl;
+	cout << "selected_X labels are:" << endl;
+	for (int i=0;i<num_selected;i++)
+		cout << labels[i] << ", ";
+	cout << endl;
+	*/
 	Node *parent = new Node();
 	if(labels_size==0)
 		cout << "learn_tree called with labels size 0. size X is (" << X_rows << " x " << X_cols << ")" << endl;
@@ -138,9 +147,9 @@ Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_si
 		if(labels[i-1]!=labels[i]){//need to learn
 			//there are different labels, but the datapoints may be the same. Are they?
 			bool indivisible=true;
-			for(int k=1;indivisible && k<X_rows;k++)
+			for(int k=1;indivisible && k<num_selected;k++)
 				for(int j=0;indivisible && j<X_cols;j++)
-					if(X[(k-1)*X_cols+j]!=X[k*X_cols+j])//compare every element of this one against every element of the previous point
+					if(X[(selected_X[k]-1)*X_cols+j]!=X[selected_X[k]*X_cols+j])//compare every element of this one against every element of the previous point
 						indivisible=false;
 
 			if(indivisible){
@@ -176,7 +185,7 @@ Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_si
 						if(unique_labels_local[j]==labels[k])
 							unique_labels_local_counts[j]=unique_labels_local_counts[j]+1;
 				}
-				//cout << "There are " << num_unique << " indistinguishable labels: " << unique_labels_local.transpose() << ", and their counts: " << unique_labels_local_counts.transpose() << endl;
+				//cout << "There are " << num_unique << " indistinguishable labels." << endl;
 				//cout << endl << X << endl;
 
 				for(int j=0;j<num_unique;j++){
@@ -185,7 +194,7 @@ Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_si
 				}
 				parent->entropy=entropy(labels,labels_size,unique_labels,unique_labels_size);
 				parent->weight=labels_size;
-				//cout << "created leaf with label " << parent.label << endl;
+				//cout << "created leaf with several labels" << endl;
 			}else{
 				//cout << "There are different points here. Learning clasifier." << endl;//labels.transpose() << "\nX:\n" << X << endl;
 				//try to separate them 1000 times
@@ -194,11 +203,11 @@ Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_si
 				for(int d=0;d<X_cols;d++){
 					min[d]=numeric_limits<float>::max();
 					max[d]=numeric_limits<float>::min();
-					for(int i=0;i<X_rows;i++){
-						if(min[d]>X[i*X_cols+d])
-							min[d]=X[i*X_cols+d];
-						if(max[d]<X[i*X_cols+d])
-							max[d]=X[i*X_cols+d];
+					for(int i=0;i<num_selected;i++){
+						if(min[d]>X[selected_X[i]*X_cols+d])
+							min[d]=X[selected_X[i]*X_cols+d];
+						if(max[d]<X[selected_X[i]*X_cols+d])
+							max[d]=X[selected_X[i]*X_cols+d];
 					}
 				}
 
@@ -215,8 +224,8 @@ Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_si
 					//create positive and negative X and labels
 					posrows=0;
 					negrows=0;
-					for(int j=0;j<X_rows;j++)
-						if(X[j*X_cols+parent->chosen_d]>parent->w)
+					for(int j=0;j<num_selected;j++)
+						if(X[selected_X[j]*X_cols+parent->chosen_d]>parent->w)
 							posrows++;
 						else
 							negrows++;
@@ -229,8 +238,8 @@ Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_si
 					posrows=0;//becomes incrementer
 					negrows=0;//becomes incrementer
 					//place elements in each branch
-					for(int j=0;j<X_rows;j++)
-						if(X[j*X_cols+parent->chosen_d]>parent->w){
+					for(int j=0;j<num_selected;j++)
+						if(X[selected_X[j]*X_cols+parent->chosen_d]>parent->w){
 							//for(int k=0;k<X_cols;k++)
 							//	X_pos[posrows*X_cols+k]=X[j*X_cols+k];
 							labels_pos[posrows++]=labels[j];
@@ -242,56 +251,65 @@ Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_si
 					entropy_sum=entropy(labels_pos,posrows,unique_labels,unique_labels_size)+entropy(labels_neg,negrows,unique_labels,unique_labels_size);
 				}
 				//cout << "I really tried, man. I tried " << tries-1 << " times, and came up with pos #" << posrows << ", neg #" << negrows << ". Parent d and w are " << parent->chosen_d << " and " << parent->w << ", and the entropy has gone from " << parent_entropy << " to " << entropy_sum << endl;
-				int labels_pos[posrows];
-				double* X_pos = new double[posrows*X_cols];
-				int labels_neg[negrows];
-				double* X_neg = new double[negrows*X_cols];
+				int* labels_pos = new int[posrows];
+				//double* X_pos = new double[posrows*X_cols];
+				int* selected_pos = new int[posrows];
+				int* labels_neg = new int[negrows];
+				//double* X_neg = new double[negrows*X_cols];
+				int* selected_neg = new int[negrows];
+				if(posrows+negrows!=num_selected)
+					cout << "error: selcted positive rows + selected negative rows != total rows under consideration." << endl;
 
 				posrows=0;//becomes incrementer
 				negrows=0;//becomes incrementer
 				//place elements in each branch
-				for(int j=0;j<X_rows;j++)
-					if(X[j*X_cols+parent->chosen_d]>parent->w){
-						for(int k=0;k<X_cols;k++)
-							X_pos[posrows*X_cols+k]=X[j*X_cols+k];
+				for(int j=0;j<num_selected;j++)
+					if(X[selected_X[j]*X_cols+parent->chosen_d]>parent->w){
+						selected_pos[posrows]=selected_X[j];
 						labels_pos[posrows++]=labels[j];
 					}else{
-						for(int k=0;k<X_cols;k++)
-							X_neg[negrows*X_cols+k]=X[j*X_cols+k];
+						selected_neg[negrows]=selected_X[j];
 						labels_neg[negrows++]=labels[j];
 					}
 				//if either positive or negative labels are empty, simply replace the parent with the new classifier. They can't both be empty. This reflects a classifier that didn't help, and is discarted.
 				if(negrows==0){
 					delete parent;
-					parent=learn_tree(X_pos,X_cols,posrows,labels_pos,posrows,unique_labels,unique_labels_size);
-                    			delete[] X_pos;
+					parent=learn_tree(X,X_cols,posrows,labels_pos,posrows,unique_labels,unique_labels_size,selected_pos,posrows);
+                    			delete[] selected_pos;
+                    			delete[] labels_pos;
 				}else if(posrows==0){
 					delete parent;
-					parent=learn_tree(X_neg,X_cols,negrows,labels_neg,negrows,unique_labels,unique_labels_size);
-                    			delete[] X_neg;
+					parent=learn_tree(X,X_cols,negrows,labels_neg,negrows,unique_labels,unique_labels_size,selected_neg,negrows);
+                    			delete[] selected_neg;
+                    			delete[] labels_neg;
 				}else{
-					Node* pos=learn_tree(X_pos,X_cols,posrows,labels_pos,posrows,unique_labels,unique_labels_size);
+					Node* pos=learn_tree(X,X_cols,posrows,labels_pos,posrows,unique_labels,unique_labels_size,selected_pos,posrows);
 					parent->pos=pos;
-                   			delete[] X_pos;
+					//cout << "pos created and put into tree, now deleting arrays" << endl;
+                   			delete[] selected_pos;
+					delete[] labels_pos;
+					//cout << "pos arrays deleted, learning neg tree (size " << negrows << ")" << endl;
 
-					Node* neg=learn_tree(X_neg,X_cols,negrows,labels_neg,negrows,unique_labels,unique_labels_size);
+					Node* neg=learn_tree(X,X_cols,negrows,labels_neg,negrows,unique_labels,unique_labels_size,selected_neg,negrows);
 					parent->neg=neg;
-                    			delete[] X_neg;
+                    			delete[] selected_neg;
+                    			delete[] labels_neg;
 				}
 			}
 			break;//stop for loop
-		}else if(i==labels_size-1){//all the same, don't learn
+		}else if(i==labels_size-1){//all the same, don't learn. This creates a leaf (no children)
 			parent->label.push_back(labels[0]);
 			parent->leaf_weight.push_back(labels_size);
 			parent->entropy=0.0f;
 			parent->weight=labels_size;
+			//cout << "all the same, created leaf with label " << labels[0] << endl;
 		}
-	if(labels_size==1){//all the same, don't learn
+	if(labels_size==1){//There is only onw datapoint, so create a leaf
 		parent->label.push_back(labels[0]);
 		parent->leaf_weight.push_back(1);
 		parent->entropy=0.0f;
 		parent->weight=labels_size;
-		//cout << "Just one datapoint. Created leaf with label " << parent.label << endl;
+		//cout << "Just one datapoint. Created leaf with label " << labels[0] << endl;
 	}
 	return parent;
 }
@@ -341,7 +359,7 @@ int main(int argc, char** argv)
 		num_trees=atoi(argv[2]);
 		outfilename=argv[3];
 	}
-	cout << "reading file " << filename << endl;
+	cout << "reading file to check size and inconsistencies " << filename << endl;
 	//read the file twice. Once to count elements per line and #lines
 	ifstream file (filename); 
 	string value, line;
@@ -372,7 +390,8 @@ int main(int argc, char** argv)
 	//and the second time to put everything into a matrix
 	int X_rows=rows-incomplete_rows;
 	int X_cols=cols-1;
-	double csv[X_rows*X_cols];
+	cout << "creating double array of size " << rows * cols << endl;
+	double* csv = new double[X_rows*X_cols];
 	//VectorXi labels(rows-incomplete_rows);
 	int labels[rows-incomplete_rows];
 	int labels_size = rows-incomplete_rows;
@@ -382,6 +401,7 @@ int main(int argc, char** argv)
 	string token;
 	int i=0;
 	int incomplete_i=0;
+	cout << "reading training file into double array." << endl;
 	getline (file, line);
 	while ( file.good() )
 	{
@@ -440,8 +460,11 @@ int main(int argc, char** argv)
 
 	cout << "\nStarting learning " << num_trees << " trees" << endl;
 	vector<Node*> forest;
+	int selected_X[X_rows];
+	for (int i=0;i<X_rows;i++)
+		selected_X[i]=i;//initialize with all points
 	for (int i=0;i<num_trees;i++){
-		forest.push_back(learn_tree(csv,X_cols,X_rows,labels,labels_size,unique_labels,num_unique));
+		forest.push_back(learn_tree(csv,X_cols,X_rows,labels,labels_size,unique_labels,num_unique,selected_X,X_rows));
 	}
 	cout << "... learning complete" << endl;
 

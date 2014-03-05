@@ -4,7 +4,7 @@ by Martin Kolar, 12.2013
 
 Train a random forest of Entropy-reducing trees on a csv input, capable of multiclass classification. The trained forest is stored in a .forest file.
 
-Evaluate a set of unlabeled data from a csv file, which can handle '?' for unknown values. The output .classification file is a csv of votes from each tree. The votes for each label are summed over all trees, for selection or ranking applications. A tree may be uncertain when deciding in a node (when the value is '?'), and will follow both branches.
+Evaluate a set of unlabeled data from a csv file, which can handle '?' for unknown values. The output .classification file is a csv of votes from each tree. The votes for each label are summed over all trees, for selection or ranking applications. A tree may be uncertain when deciding in a node (when the value is '?'), and will follow both branches. For each unknown entry in each datapoint, usefulness can also be calculated, in order to decide the importance of data which could be gathered. This sums the importance of each feature over all trees.
 
 Example data is the Breast Cancer Wisconsin (Original) Data Set dataset, available http://archive.ics.uci.edu/ml/datasets/Breast+Cancer+Wisconsin+(Original)
 
@@ -39,9 +39,12 @@ Output .classification file: breast.classification
 
 USAGE:
 training: (as of version 1.0, rows with '?' entries are ignored)
-./forest_train *training csv file* *number of trees* *.forest output file*
+./forest_train *training_csv_file* *number_of_trees* *.forest_output_file*
 ./forest_train ../Wisconsin_Breast_Cancer_train.csv 5 breast.forest
 
 evaluation:
-./forest_eval *testing csv file* *.forest input file* *.classification output file*
+./forest_eval *testing_csv_file* *.forest_input_file* *.classification_output_file*
 ./forest_eval ../Wisconsin_Breast_Cancer_test_nolabels.csv breast.forest breast.classification
+or
+./forest_eval *testing_csv_file* *.forest_input_file* *.classification_output_file* *usefulness_output_file*
+./forest_eval ../Wisconsin_Breast_Cancer_test_nolabels.csv breast.forest breast.classification unknowns_usefulness.entropy
