@@ -128,6 +128,16 @@ Node* learn_node(double X[], int X_cols,int X_rows, int labels[], int labels_siz
 	return curnode;
 }
 
+//overload the learn_node function to reduce overhead. However, this function does not allow complex training beyond random classifiers
+Node* learn_node(int X_cols, float min[], float max[]){
+	Node *curnode = new Node();
+	int d=rand()%X_cols;
+	curnode->chosen_d=d;
+	curnode->w=(max[d]-min[d])* ((double)rand() / RAND_MAX) +min[d];
+	return curnode;
+}
+
+//this function recursively learns the tree, until reaching nodes where division is either impossible or all the labels are the same
 Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_size, int unique_labels[], int unique_labels_size, int selected_X[], int num_selected){
 	/*cout << "selected_X is:" << endl;
 	for (int i=0;i<num_selected;i++)
@@ -218,7 +228,7 @@ Node* learn_tree(double X[], int X_cols, int X_rows, int labels[], int labels_si
 				float entropy_sum=parent_entropy;
 				while(tries++<500 && (entropy_sum>=parent_entropy)){
 					delete parent;
-					parent = learn_node(X,X_cols,X_rows,labels,labels_size,unique_labels,unique_labels_size,min,max);
+					parent = learn_node(X_cols,min,max);
 					parent->entropy=parent_entropy;
 					parent->weight=labels_size;
 					//create positive and negative X and labels
@@ -463,13 +473,25 @@ int main(int argc, char** argv)
 	int selected_X[X_rows];
 	for (int i=0;i<X_rows;i++)
 		selected_X[i]=i;//initialize with all points
-	for (int i=0;i<num_trees;i++){
+	// learn entire forest, then save it
+	/* for (int i=0;i<num_trees;i++){
 		forest.push_back(learn_tree(csv,X_cols,X_rows,labels,labels_size,unique_labels,num_unique,selected_X,X_rows));
 	}
 	cout << "... learning complete" << endl;
 
 	//cout << forest[1] << endl;
-	save(forest,outfilename);
+	save(forest,outfilename); */
+
+	// learn each tree on its own, save it, and erase it from memory
+	ofstream forestfile(outfilename);
+	forestfile << num_trees << " trees" << endl;
+	for (int i=0;i<num_trees;i++){
+		Node *parent = learn_tree(csv,X_cols,X_rows,labels,labels_size,unique_labels,num_unique,selected_X,X_rows);
+		forestfile << *parent << "next tree" << endl;
+		delete parent;
+		cout << "learned tree " << i << " of " << num_trees << endl;
+	}
+	forestfile.close();
 	/*
 	vector<Node> learning_buffer;
 	learning_buffer.push_back(root);
